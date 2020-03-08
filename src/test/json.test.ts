@@ -174,21 +174,6 @@ suite('JSON', () => {
 		assertKinds(',', SyntaxKind.CommaToken);
 	});
 
-	test('comments', () => {
-		assertKinds('// this is a comment', SyntaxKind.LineCommentTrivia);
-		assertKinds('// this is a comment\n', SyntaxKind.LineCommentTrivia, SyntaxKind.LineBreakTrivia);
-		assertKinds('/* this is a comment*/', SyntaxKind.BlockCommentTrivia);
-		assertKinds('/* this is a \r\ncomment*/', SyntaxKind.BlockCommentTrivia);
-		assertKinds('/* this is a \ncomment*/', SyntaxKind.BlockCommentTrivia);
-
-		// unexpected end
-		assertScanError('/* this is a', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);
-		assertScanError('/* this is a \ncomment', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);
-
-		// broken comment
-		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Unknown);
-	});
-
 	test('strings', () => {
 		assertKinds('"test"', SyntaxKind.StringLiteral);
 		assertKinds('"\\""', SyntaxKind.StringLiteral);
@@ -634,3 +619,44 @@ suite('JSON', () => {
 
 
 });
+
+
+suite('JSON5', () => {
+	test('comments', () => {
+		assertKinds('// this is a comment', SyntaxKind.LineCommentTrivia);
+		assertKinds('// this is a comment\n', SyntaxKind.LineCommentTrivia, SyntaxKind.LineBreakTrivia);
+		assertKinds('/* this is a comment*/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/* this is a \r\ncomment*/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/* this is a \ncomment*/', SyntaxKind.BlockCommentTrivia);
+
+		// unexpected end
+		assertScanError('/* this is a', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);
+		assertScanError('/* this is a \ncomment', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);
+
+		// broken comment
+		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Unknown);
+	});
+
+	test('strings', () => {
+		// single quotes
+		assertKinds("'test'", SyntaxKind.StringLiteral);
+		assertKinds("'\\''", SyntaxKind.StringLiteral);
+		assertKinds("'\\/'", SyntaxKind.StringLiteral);
+		assertKinds("'\\b'", SyntaxKind.StringLiteral);
+		assertKinds("'\\f'", SyntaxKind.StringLiteral);
+		assertKinds("'\\n'", SyntaxKind.StringLiteral);
+		assertKinds("'\\r'", SyntaxKind.StringLiteral);
+		assertKinds("'\\t'", SyntaxKind.StringLiteral);
+		assertKinds("'\u88ff'", SyntaxKind.StringLiteral);
+		assertKinds("'​\u2028'", SyntaxKind.StringLiteral);
+		assertScanError("'\\v'", ScanError.InvalidEscapeCharacter, SyntaxKind.StringLiteral);
+
+		// unbalanced quotes
+		assertScanError("'\"", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
+		assertScanError("\"'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
+
+		// unexpected end
+		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
+		assertScanError("'test\n'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);
+	})
+})

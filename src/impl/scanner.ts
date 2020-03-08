@@ -98,7 +98,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		return text.substring(start, end);
 	}
 
-	function scanString(): string {
+	function scanString(delimiter: CharacterCodes): string {
 
 		let result = '',
 			start = pos;
@@ -110,7 +110,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				break;
 			}
 			const ch = text.charCodeAt(pos);
-			if (ch === CharacterCodes.doubleQuote) {
+			if (ch === delimiter) {
 				result += text.substring(start, pos);
 				pos++;
 				break;
@@ -126,6 +126,9 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				switch (ch2) {
 					case CharacterCodes.doubleQuote:
 						result += '\"';
+						break;
+					case CharacterCodes.singleQuote:
+						result += '\'';
 						break;
 					case CharacterCodes.backslash:
 						result += '\\';
@@ -241,7 +244,11 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			// strings
 			case CharacterCodes.doubleQuote:
 				pos++;
-				value = scanString();
+				value = scanString(CharacterCodes.doubleQuote);
+				return token = SyntaxKind.StringLiteral;
+			case CharacterCodes.singleQuote:
+				pos++;
+				value = scanString(CharacterCodes.singleQuote);
 				return token = SyntaxKind.StringLiteral;
 
 			// comments
