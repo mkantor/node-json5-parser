@@ -328,14 +328,14 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 
 			// numbers
 			case CharacterCodes.minus:
+			case CharacterCodes.plus:
 				value += String.fromCharCode(code);
 				pos++;
 				if (pos === len || !isDigit(text.charCodeAt(pos))) {
 					return token = SyntaxKind.Unknown;
 				}
-			// found a minus, followed by a number so
-			// we fall through to proceed with scanning
-			// numbers
+			// found a plus or minus followed by a number so we fall through to
+			// proceed with scanning numbers
 			case CharacterCodes._0:
 			case CharacterCodes._1:
 			case CharacterCodes._2:

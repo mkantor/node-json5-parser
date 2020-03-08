@@ -674,4 +674,13 @@ suite('JSON5', () => {
 		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
 		assertScanError("'test\n'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);
 	})
+
+	test('numbers', () => {
+		// plus sign
+		assertKinds('+0', SyntaxKind.NumericLiteral);
+		assertKinds('+0.1', SyntaxKind.NumericLiteral);
+		assertKinds('+1', SyntaxKind.NumericLiteral);
+		assertKinds('+90e-123', SyntaxKind.NumericLiteral);
+		assertKinds('+90e+123', SyntaxKind.NumericLiteral);
+	});
 })
