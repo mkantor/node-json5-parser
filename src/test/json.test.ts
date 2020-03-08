@@ -655,6 +655,18 @@ suite('JSON5', () => {
 		assertScanError("'\"", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
 		assertScanError("\"'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
 
+		// multiple lines
+		assertKinds('" \\\n "', SyntaxKind.StringLiteral);
+		assertKinds("' \\\n '", SyntaxKind.StringLiteral);
+		assertKinds('" \\\r "', SyntaxKind.StringLiteral);
+		assertKinds("' \\\r '", SyntaxKind.StringLiteral);
+		assertKinds('" \\\u2028 "', SyntaxKind.StringLiteral);
+		assertKinds("' \\\u2028 '", SyntaxKind.StringLiteral);
+		assertKinds('" \\\u2029 "', SyntaxKind.StringLiteral);
+		assertKinds("' \\\u2029 '", SyntaxKind.StringLiteral);
+		assertKinds('" \\\r\n "', SyntaxKind.StringLiteral);
+		assertKinds("' \\\r\n '", SyntaxKind.StringLiteral);
+
 		// unexpected end
 		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
 		assertScanError("'test\n'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);

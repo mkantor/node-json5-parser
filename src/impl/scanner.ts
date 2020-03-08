@@ -123,7 +123,18 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					break;
 				}
 				const ch2 = text.charCodeAt(pos++);
+				let ch3: number
 				switch (ch2) {
+					case CharacterCodes.lineFeed:
+					case CharacterCodes.lineSeparator:
+					case CharacterCodes.paragraphSeparator:
+						break;
+					case CharacterCodes.carriageReturn:
+						ch3 = text.charCodeAt(pos++);
+						if (ch3 === CharacterCodes.lineFeed) {
+							pos++;
+						}
+						break;
 					case CharacterCodes.doubleQuote:
 						result += '\"';
 						break;
@@ -152,7 +163,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 						result += '\t';
 						break;
 					case CharacterCodes.u:
-						const ch3 = scanHexDigits(4, true);
+						ch3 = scanHexDigits(4, true);
 						if (ch3 >= 0) {
 							result += String.fromCharCode(ch3);
 						} else {
