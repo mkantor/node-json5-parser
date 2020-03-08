@@ -682,5 +682,13 @@ suite('JSON5', () => {
 		assertKinds('+1', SyntaxKind.NumericLiteral);
 		assertKinds('+90e-123', SyntaxKind.NumericLiteral);
 		assertKinds('+90e+123', SyntaxKind.NumericLiteral);
+
+		// hexadecimal numbers
+		assertKinds('0xa', SyntaxKind.NumericLiteral);
+		assertKinds('0xdecaf', SyntaxKind.NumericLiteral);
+		assertKinds('-0xC0FFEE', SyntaxKind.NumericLiteral);
+		assertKinds('0x0', SyntaxKind.NumericLiteral);
+		assertScanError('-0x', ScanError.UnexpectedEndOfNumber, SyntaxKind.Unknown);
+		assertScanError('-0xG', ScanError.UnexpectedEndOfNumber, SyntaxKind.Unknown, SyntaxKind.Unknown);
 	});
 })

@@ -23,29 +23,26 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		prevTokenLineStartOffset = 0,
 		scanError: ScanError = ScanError.None;
 
-	function scanHexDigits(count: number, exact?: boolean): number {
+	function scanHexDigits(count?: number): number | undefined {
 		let digits = 0;
-		let value = 0;
-		while (digits < count || !exact) {
+		let value = undefined;
+		do {
 			let ch = text.charCodeAt(pos);
 			if (ch >= CharacterCodes._0 && ch <= CharacterCodes._9) {
-				value = value * 16 + ch - CharacterCodes._0;
+				value = (value || 0) * 16 + ch - CharacterCodes._0;
 			}
 			else if (ch >= CharacterCodes.A && ch <= CharacterCodes.F) {
-				value = value * 16 + ch - CharacterCodes.A + 10;
+				value = (value || 0) * 16 + ch - CharacterCodes.A + 10;
 			}
 			else if (ch >= CharacterCodes.a && ch <= CharacterCodes.f) {
-				value = value * 16 + ch - CharacterCodes.a + 10;
+				value = (value || 0) * 16 + ch - CharacterCodes.a + 10;
 			}
 			else {
 				break;
 			}
 			pos++;
 			digits++;
-		}
-		if (digits < count) {
-			value = -1;
-		}
+		} while (value != undefined || (!count || digits >= count))
 		return value;
 	}
 
@@ -123,14 +120,13 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					break;
 				}
 				const ch2 = text.charCodeAt(pos++);
-				let ch3: number
 				switch (ch2) {
 					case CharacterCodes.lineFeed:
 					case CharacterCodes.lineSeparator:
 					case CharacterCodes.paragraphSeparator:
 						break;
 					case CharacterCodes.carriageReturn:
-						ch3 = text.charCodeAt(pos++);
+						const ch3 = text.charCodeAt(pos++);
 						if (ch3 === CharacterCodes.lineFeed) {
 							pos++;
 						}
@@ -169,9 +165,9 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 						result += '\0';
 						break;
 					case CharacterCodes.u:
-						ch3 = scanHexDigits(4, true);
-						if (ch3 >= 0) {
-							result += String.fromCharCode(ch3);
+						const hex = scanHexDigits(4);
+						if (hex !== undefined) {
+							result += String.fromCharCode(hex);
 						} else {
 							scanError = ScanError.InvalidUnicode;
 						}
@@ -337,6 +333,19 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			// found a plus or minus followed by a number so we fall through to
 			// proceed with scanning numbers
 			case CharacterCodes._0:
+				// check for hexadecimal number
+				const ch2 = text.charCodeAt(pos + 1);
+				if (ch2 === CharacterCodes.x || ch2 === CharacterCodes.X) {
+					pos++;
+					pos++;
+					const hex = scanHexDigits();
+					if (hex !== undefined) {
+						value += String.fromCharCode(hex);
+					} else {
+						scanError = ScanError.UnexpectedEndOfNumber;
+						return token = SyntaxKind.Unknown;
+					}
+				}
 			case CharacterCodes._1:
 			case CharacterCodes._2:
 			case CharacterCodes._3:
@@ -348,6 +357,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes._9:
 				value += scanNumber();
 				return token = SyntaxKind.NumericLiteral;
+
 			// literals and unknown symbols
 			default:
 				// is a literal? Read the full word.
