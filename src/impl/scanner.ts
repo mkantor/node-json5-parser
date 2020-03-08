@@ -162,6 +162,12 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					case CharacterCodes.t:
 						result += '\t';
 						break;
+					case CharacterCodes.v:
+						result += '\v';
+						break;
+					case CharacterCodes._0:
+						result += '\0';
+						break;
 					case CharacterCodes.u:
 						ch3 = scanHexDigits(4, true);
 						if (ch3 >= 0) {

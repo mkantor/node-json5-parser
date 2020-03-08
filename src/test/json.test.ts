@@ -185,7 +185,6 @@ suite('JSON', () => {
 		assertKinds('"\\t"', SyntaxKind.StringLiteral);
 		assertKinds('"\u88ff"', SyntaxKind.StringLiteral);
 		assertKinds('"​\u2028"', SyntaxKind.StringLiteral);
-		assertScanError('"\\v"', ScanError.InvalidEscapeCharacter, SyntaxKind.StringLiteral);
 
 		// unexpected end
 		assertScanError('"test', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
@@ -640,7 +639,7 @@ suite('JSON5', () => {
 	test('strings', () => {
 		// single quotes
 		assertKinds("'test'", SyntaxKind.StringLiteral);
-		assertKinds("'\\''", SyntaxKind.StringLiteral);
+		assertKinds("'\\\"'", SyntaxKind.StringLiteral);
 		assertKinds("'\\/'", SyntaxKind.StringLiteral);
 		assertKinds("'\\b'", SyntaxKind.StringLiteral);
 		assertKinds("'\\f'", SyntaxKind.StringLiteral);
@@ -649,7 +648,6 @@ suite('JSON5', () => {
 		assertKinds("'\\t'", SyntaxKind.StringLiteral);
 		assertKinds("'\u88ff'", SyntaxKind.StringLiteral);
 		assertKinds("'​\u2028'", SyntaxKind.StringLiteral);
-		assertScanError("'\\v'", ScanError.InvalidEscapeCharacter, SyntaxKind.StringLiteral);
 
 		// unbalanced quotes
 		assertScanError("'\"", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
@@ -666,6 +664,11 @@ suite('JSON5', () => {
 		assertKinds("' \\\u2029 '", SyntaxKind.StringLiteral);
 		assertKinds('" \\\r\n "', SyntaxKind.StringLiteral);
 		assertKinds("' \\\r\n '", SyntaxKind.StringLiteral);
+
+		// character escapes
+		assertKinds("'\\''", SyntaxKind.StringLiteral);
+		assertKinds("'\\v'", SyntaxKind.StringLiteral);
+		assertKinds("'\\0'", SyntaxKind.StringLiteral);
 
 		// unexpected end
 		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
