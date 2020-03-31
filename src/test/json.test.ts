@@ -218,7 +218,6 @@ suite('JSON', () => {
 
 		// unexpected end
 		assertKinds('-', SyntaxKind.Unknown);
-		assertKinds('.0', SyntaxKind.Unknown);
 	});
 
 	test('keywords: true, false, null', () => {

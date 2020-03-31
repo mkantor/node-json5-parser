@@ -325,6 +325,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			// numbers
 			case CharacterCodes.minus:
 			case CharacterCodes.plus:
+			case CharacterCodes.dot:
 				value += String.fromCharCode(code);
 				pos++;
 				if (pos === len || !isDigit(text.charCodeAt(pos))) {
