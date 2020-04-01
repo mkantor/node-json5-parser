@@ -54,45 +54,301 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		scanError = ScanError.None;
 	}
 
-	function scanNumber(): string {
-		let start = pos;
-		if (text.charCodeAt(pos) === CharacterCodes._0) {
-			pos++;
+	type ScanSuccess = {
+		kind: 'success';
+		lexeme: string;
+	};
+	type ScanFailure = {
+		kind: 'failure';
+		error: Error;
+	};
+	type ScanResult = ScanSuccess | ScanFailure;
+
+	type Scanner = (input: string) => ScanResult;
+
+	function isFailure(result: ScanResult): result is ScanFailure {
+		return result.kind === 'failure' && result.error instanceof Error;
+	}
+
+	function literal(text: string): Scanner {
+		const scanLiteral = (input: string) => {
+			if (input.startsWith(text)) {
+				return {
+					kind: 'success',
+					lexeme: text
+				} as const;
+			} else {
+				return {
+					kind: 'failure',
+					error: new Error(`Unable to scan literal "${text}" from "${input}"`)
+				} as const;
+			}
+		};
+		Object.defineProperty(scanLiteral, 'name', {
+			value: `literal("${text}")`
+		});
+		return scanLiteral;
+	}
+
+	function combineAnd(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
+		if (isFailure(firstResult)) {
+			return firstResult;
+		} else if (isFailure(secondResult)) {
+			return secondResult;
 		} else {
-			pos++;
-			while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-				pos++;
-			}
+			return {
+				kind: 'success',
+				lexeme: firstResult.lexeme + secondResult.lexeme
+			};
 		}
-		if (pos < text.length && text.charCodeAt(pos) === CharacterCodes.dot) {
-			pos++;
-			if (pos < text.length && isDigit(text.charCodeAt(pos))) {
-				pos++;
-				while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-					pos++;
+	}
+
+	/** This function is greedy; if both succeeded, return the longer result. */
+	function combineOr(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
+		if (isFailure(secondResult)) {
+			return firstResult;
+		} else if (isFailure(firstResult)) {
+			return secondResult;
+		} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
+			return firstResult;
+		} else {
+			return secondResult;
+		}
+	}
+
+	function and(firstScanner: Scanner, ...otherScanners: [Scanner, ...Scanner[]]): Scanner {
+		const scanAnd = (input: string) => {
+			let result = firstScanner(input);
+			let remainingInput = input;
+			for (const scanner of otherScanners) {
+				if (isFailure(result)) {
+					break;
 				}
-			} else {
-				scanError = ScanError.UnexpectedEndOfNumber;
-				return text.substring(start, pos);
+				remainingInput = input.substring(result.lexeme.length);
+				result = combineAnd(result, scanner(remainingInput));
 			}
-		}
-		let end = pos;
-		if (pos < text.length && (text.charCodeAt(pos) === CharacterCodes.E || text.charCodeAt(pos) === CharacterCodes.e)) {
-			pos++;
-			if (pos < text.length && text.charCodeAt(pos) === CharacterCodes.plus || text.charCodeAt(pos) === CharacterCodes.minus) {
-				pos++;
+			return result;
+		};
+		const scannerNames = [firstScanner, ...otherScanners].map(f => f.name);
+		Object.defineProperty(scanAnd, 'name', {
+			value: `and(${scannerNames.join(', ')})`
+		});
+		return scanAnd;
+	}
+
+	/** This function is greedy; if multiple scanners succeed, return the longest result. */
+	function or(firstScanner: Scanner, ...otherScanners: [Scanner, ...Scanner[]]): Scanner {
+		const scanOr = (input: string) => {
+			let result = firstScanner(input);
+			for (const scanner of otherScanners) {
+				result = combineOr(result, scanner(input));
 			}
-			if (pos < text.length && isDigit(text.charCodeAt(pos))) {
-				pos++;
-				while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-					pos++;
+			return result;
+		};
+		const scannerNames = [firstScanner, ...otherScanners].map(f => f.name);
+		Object.defineProperty(scanOr, 'name', {
+			value: `or(${scannerNames.join(', ')})`
+		});
+		return scanOr;
+	}
+
+	function zeroOrMore(scanner: Scanner): Scanner {
+		const scanZeroOrMore = (input: string) => {
+			let result = scanner(input);
+			if (isFailure(result)) {
+				return scanNothing(input);
+			}
+			let remainingInput: string;
+			do {
+				remainingInput = isFailure(result) ? '' : input.substring(result.lexeme.length);
+				const nextResult = scanner(remainingInput);
+				if (isFailure(nextResult)) {
+					break;
 				}
-				end = pos;
-			} else {
-				scanError = ScanError.UnexpectedEndOfNumber;
+				result = combineAnd(result, nextResult);
+			} while (remainingInput.length > 0);
+			return result;
+		};
+		Object.defineProperty(scanZeroOrMore, 'name', {
+			value: `zeroOrMore(${scanner.name})`
+		});
+		return scanZeroOrMore;
+	}
+
+	function oneOrMore(scanner: Scanner): Scanner {
+		const scanOneOrMore = (input: string) => {
+			const result = scanner(input);
+			if (isFailure(result)) {
+				return result;
 			}
+			const remainingInput = isFailure(result) ? '' : input.substring(result.lexeme.length);
+			return combineAnd(result, zeroOrMore(scanner)(remainingInput))
+		};
+		Object.defineProperty(scanOneOrMore, 'name', {
+			value: `oneOrMore(${scanner.name})`
+		});
+		return scanOneOrMore;
+	}
+
+	function optional(scanner: Scanner): Scanner {
+		const scanOptional = (input: string) => {
+			const result = or(scanner, scanNothing)(input);
+			return result;
+		};
+		Object.defineProperty(scanOptional, 'name', {
+			value: `optional(${scanner.name})`
+		});
+		return scanOptional;
+	}
+
+	function scanNothing(input: string): ScanResult {
+		return {
+			kind: 'success',
+			lexeme: ''
+		};
+	}
+
+	// HexDigit :: one of
+	// 	0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F
+	function scanHexDigit(input: string): ScanResult {
+		const ch = input.charCodeAt(0);
+		if (
+			(ch >= CharacterCodes._0 && ch <= CharacterCodes._9) ||
+			(ch >= CharacterCodes.A && ch <= CharacterCodes.F) ||
+			(ch >= CharacterCodes.a && ch <= CharacterCodes.f)
+		) {
+			return {
+				kind: 'success',
+				lexeme: String.fromCharCode(ch)
+			};
+		} else {
+			return {
+				kind: 'failure',
+				error: new Error(`Unable to scan hex digit from "${input}"`)
+			};
 		}
-		return text.substring(start, end);
+	}
+
+	// DecimalDigit :: one of
+	// 	0 1 2 3 4 5 6 7 8 9
+	function scanDecimalDigit(input: string): ScanResult {
+		const ch = input.charCodeAt(0);
+		if (ch >= CharacterCodes._0 && ch <= CharacterCodes._9) {
+			return {
+				kind: 'success',
+				lexeme: String.fromCharCode(ch)
+			};
+		} else {
+			return {
+				kind: 'failure',
+				error: new Error(`Unable to scan decimal digit from "${input}"`)
+			};
+		}
+	}
+
+	// NonZeroDigit :: one of
+	// 	1 2 3 4 5 6 7 8 9
+	function scanNonZeroDigit(input: string): ScanResult {
+		const ch = input.charCodeAt(0);
+		if (ch >= CharacterCodes._1 && ch <= CharacterCodes._9) {
+			return {
+				kind: 'success',
+				lexeme: String.fromCharCode(ch)
+			};
+		} else {
+			return {
+				kind: 'failure',
+				error: new Error(`Unable to scan non-zero digit from "${input}"`)
+			};
+		}
+	}
+
+	// ExponentIndicator :: one of
+	// 	e E
+	function scanExponentIndicator(input: string): ScanResult {
+		const ch = input.charCodeAt(0);
+		if (ch === CharacterCodes.e || ch === CharacterCodes.E) {
+			return {
+				kind: 'success',
+				lexeme: String.fromCharCode(ch)
+			};
+		} else {
+			return {
+				kind: 'failure',
+				error: new Error(`Unable to scan exponent indicator from "${input}"`)
+			};
+		}
+	}
+
+	// HexIntegerLiteral ::
+	// 	0x HexDigit
+	// 	0X HexDigit
+	// 	HexIntegerLiteral HexDigit
+	function scanHexIntegerLiteral(input: string): ScanResult {
+		return or(and(literal('0x'), oneOrMore(scanHexDigit)), and(literal('0X'), oneOrMore(scanHexDigit)))(input);
+	}
+
+	// DecimalDigits ::
+	// 	DecimalDigit
+	// 	DecimalDigits DecimalDigit
+	function scanDecimalDigits(input: string): ScanResult {
+		return oneOrMore(scanDecimalDigit)(input);
+	}
+
+	// SignedInteger ::
+	// 	DecimalDigits
+	// 	+ DecimalDigits
+	// 	- DecimalDigits
+	function scanSignedInteger(input: string): ScanResult {
+		return or(scanDecimalDigits, and(literal('+'), scanDecimalDigits), and(literal('-'), scanDecimalDigits))(input);
+	}
+
+	// ExponentPart ::
+	// 	ExponentIndicator SignedInteger
+	function scanExponentPart(input: string): ScanResult {
+		return and(scanExponentIndicator, scanSignedInteger)(input);
+	}
+
+	// DecimalIntegerLiteral ::
+	// 	0
+	// 	NonZeroDigit DecimalDigits(opt)
+	function scanDecimalIntegerLiteral(input: string): ScanResult {
+		return or(literal('0'), and(scanNonZeroDigit, optional(scanDecimalDigits)))(input);
+	}
+
+	// DecimalLiteral ::
+	// 	DecimalIntegerLiteral . DecimalDigits(opt) ExponentPart(opt)
+	// 	. DecimalDigits ExponentPart(opt)
+	// 	DecimalIntegerLiteral ExponentPart(opt)
+	function scanDecimalLiteral(input: string): ScanResult {
+		return or(
+			and(scanDecimalIntegerLiteral, literal('.'), optional(scanDecimalDigits), optional(scanExponentPart)),
+			and(literal('.'), scanDecimalDigits, optional(scanExponentPart)),
+			and(scanDecimalIntegerLiteral, optional(scanExponentPart))
+		)(input);
+	}
+
+	// NumericLiteral ::
+	// 	DecimalLiteral
+	// 	HexIntegerLiteral
+	function scanNumericLiteral(input: string): ScanResult {
+		return or(scanDecimalLiteral, scanHexIntegerLiteral)(input);
+	}
+
+	// JSON5NumericLiteral::
+	// 	NumericLiteral
+	// 	Infinity
+	// 	NaN
+	function scanJSON5NumericLiteral(input: string): ScanResult {
+		return or(scanNumericLiteral, literal('Infinity'), literal('NaN'))(input);
+	}
+
+	// JSON5Number::
+	// 	JSON5NumericLiteral
+	// 	+ JSON5NumericLiteral
+	// 	- JSON5NumericLiteral
+	function scanJSON5Number(input: string): ScanResult {
+		return or(scanJSON5NumericLiteral, and(literal('+'), scanJSON5NumericLiteral), and(literal('-'), scanJSON5NumericLiteral))(input);
 	}
 
 	function scanString(delimiter: CharacterCodes): string {
@@ -326,27 +582,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes.minus:
 			case CharacterCodes.plus:
 			case CharacterCodes.dot:
-				value += String.fromCharCode(code);
-				pos++;
-				if (pos === len || !isDigit(text.charCodeAt(pos))) {
-					return token = SyntaxKind.Unknown;
-				}
-			// found a plus or minus followed by a number so we fall through to
-			// proceed with scanning numbers
 			case CharacterCodes._0:
-				// check for hexadecimal number
-				const ch2 = text.charCodeAt(pos + 1);
-				if (ch2 === CharacterCodes.x || ch2 === CharacterCodes.X) {
-					pos++;
-					pos++;
-					const hex = scanHexDigits();
-					if (hex !== undefined) {
-						value += String.fromCharCode(hex);
-					} else {
-						scanError = ScanError.UnexpectedEndOfNumber;
-						return token = SyntaxKind.Unknown;
-					}
-				}
 			case CharacterCodes._1:
 			case CharacterCodes._2:
 			case CharacterCodes._3:
@@ -356,8 +592,17 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes._7:
 			case CharacterCodes._8:
 			case CharacterCodes._9:
-				value += scanNumber();
-				return token = SyntaxKind.NumericLiteral;
+				const scanResult = scanJSON5Number(text.substring(pos));
+				if (isFailure(scanResult)) {
+					pos++;
+					scanError = ScanError.None;
+					return (token = SyntaxKind.Unknown);
+				} else {
+					scanError = ScanError.None;
+					value = scanResult.lexeme;
+					pos += scanResult.lexeme.length;
+					return (token = SyntaxKind.NumericLiteral);
+				}
 
 			// literals and unknown symbols
 			default:
@@ -370,16 +615,26 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					value = text.substring(tokenOffset, pos);
 					// keywords: true, false, null
 					switch (value) {
-						case 'true': return token = SyntaxKind.TrueKeyword;
-						case 'false': return token = SyntaxKind.FalseKeyword;
-						case 'null': return token = SyntaxKind.NullKeyword;
+						case 'true':
+							return (token = SyntaxKind.TrueKeyword);
+						case 'false':
+							return (token = SyntaxKind.FalseKeyword);
+						case 'null':
+							return (token = SyntaxKind.NullKeyword);
 					}
-					return token = SyntaxKind.Unknown;
+					// or maybe it's one of the JSON5 literals
+					// TODO: handle this more gracefully
+					const scanResult = scanJSON5Number(value);
+					if (!isFailure(scanResult)) {
+						scanError = ScanError.None;
+						return (token = SyntaxKind.NumericLiteral);
+					}
+					return (token = SyntaxKind.Unknown);
 				}
 				// some
 				value += String.fromCharCode(code);
 				pos++;
-				return token = SyntaxKind.Unknown;
+				return (token = SyntaxKind.Unknown);
 		}
 	}
 

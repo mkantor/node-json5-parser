@@ -687,7 +687,44 @@ suite('JSON5', () => {
 		assertKinds('0xdecaf', SyntaxKind.NumericLiteral);
 		assertKinds('-0xC0FFEE', SyntaxKind.NumericLiteral);
 		assertKinds('0x0', SyntaxKind.NumericLiteral);
-		assertScanError('-0x', ScanError.UnexpectedEndOfNumber, SyntaxKind.Unknown);
-		assertScanError('-0xG', ScanError.UnexpectedEndOfNumber, SyntaxKind.Unknown, SyntaxKind.Unknown);
+
+		// leading or trailing decimal point
+		assertKinds('.0', SyntaxKind.NumericLiteral);
+		assertKinds('.90E+123', SyntaxKind.NumericLiteral);
+		assertKinds('-.1', SyntaxKind.NumericLiteral);
+		assertKinds('+.0', SyntaxKind.NumericLiteral);
+		assertKinds('+.90e-123', SyntaxKind.NumericLiteral);
+		assertKinds('-90.E+123', SyntaxKind.NumericLiteral);
+		assertKinds('0.', SyntaxKind.NumericLiteral);
+		assertKinds('-1.', SyntaxKind.NumericLiteral);
+		assertKinds('123456789.', SyntaxKind.NumericLiteral);
+		assertKinds('+1.', SyntaxKind.NumericLiteral);
+
+		// Infinity and NaN
+		assertKinds('Infinity', SyntaxKind.NumericLiteral);
+		assertKinds('-Infinity', SyntaxKind.NumericLiteral);
+		assertKinds('+Infinity', SyntaxKind.NumericLiteral);
+		assertKinds('NaN', SyntaxKind.NumericLiteral);
+		assertKinds('-NaN', SyntaxKind.NumericLiteral);
+		assertKinds('+NaN', SyntaxKind.NumericLiteral);
+
+		// unexpected end
+		assertKinds('+', SyntaxKind.Unknown);
+		assertKinds('.', SyntaxKind.Unknown);
+
+		// multiple signs
+		assertKinds('+-1', SyntaxKind.Unknown, SyntaxKind.NumericLiteral);
+		assertKinds('-+1', SyntaxKind.Unknown, SyntaxKind.NumericLiteral);
+		assertKinds('--1', SyntaxKind.Unknown, SyntaxKind.NumericLiteral);
+		assertKinds('++1', SyntaxKind.Unknown, SyntaxKind.NumericLiteral);
+
+		// invalid hex
+		assertKinds('.0x1', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+		assertKinds('-0x', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+		assertKinds('-0xG', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+		assertKinds('0xfff.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+
+		// extra decimal
+		assertKinds('.1.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
 	});
 })
