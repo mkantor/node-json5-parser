@@ -192,11 +192,6 @@ suite('JSON', () => {
 		// unexpected end
 		assertScanError('"test', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
 		assertScanError('"test\n"', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);
-
-		// invalid characters
-		assertScanError('"\t"', ScanError.InvalidCharacter, SyntaxKind.StringLiteral);
-		assertScanError('"\t "', ScanError.InvalidCharacter, SyntaxKind.StringLiteral);
-		assertScanError('"\0 "', ScanError.InvalidCharacter, SyntaxKind.StringLiteral);
 	});
 
 	test('numbers', () => {
@@ -660,10 +655,10 @@ suite('JSON5', () => {
 		assertKinds("' \\\n '", SyntaxKind.StringLiteral);
 		assertKinds('" \\\r "', SyntaxKind.StringLiteral);
 		assertKinds("' \\\r '", SyntaxKind.StringLiteral);
-		assertKinds('" \\\u2028 "', SyntaxKind.StringLiteral);
-		assertKinds("' \\\u2028 '", SyntaxKind.StringLiteral);
-		assertKinds('" \\\u2029 "', SyntaxKind.StringLiteral);
-		assertKinds("' \\\u2029 '", SyntaxKind.StringLiteral);
+		assertKinds('" \u2028 "', SyntaxKind.StringLiteral);
+		assertKinds("' \u2028 '", SyntaxKind.StringLiteral);
+		assertKinds('" \u2029 "', SyntaxKind.StringLiteral);
+		assertKinds("' \u2029 '", SyntaxKind.StringLiteral);
 		assertKinds('" \\\r\n "', SyntaxKind.StringLiteral);
 		assertKinds("' \\\r\n '", SyntaxKind.StringLiteral);
 
@@ -671,6 +666,12 @@ suite('JSON5', () => {
 		assertKinds("'\\''", SyntaxKind.StringLiteral);
 		assertKinds("'\\v'", SyntaxKind.StringLiteral);
 		assertKinds("'\\0'", SyntaxKind.StringLiteral);
+		assertKinds("'\\ '", SyntaxKind.StringLiteral);
+
+		// additional characters
+		assertKinds('"\0 "', SyntaxKind.StringLiteral);
+		assertKinds('"\t"', SyntaxKind.StringLiteral);
+		assertKinds('"\t "', SyntaxKind.StringLiteral);
 
 		// unexpected end
 		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
@@ -744,5 +745,12 @@ suite('JSON5', () => {
 		assertValidParse('-NaN', -NaN);
 		assertValidParse('+NaN', +NaN);
 		assertValidParse('.1E-999 /* comment */', .1E-999);
+	});
+
+	test('parse: objects', () => {
+		assertValidParse("{'b': {}}", { b: {} });
+		assertValidParse("{'': ''}", { '': '' });
+		assertValidParse("{'\"': '\"'}", { '"': '"' });
+		assertValidParse("{\"''\": \"''\"}", { "''": "''" });
 	});
 })

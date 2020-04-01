@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
+import JSON5 = require('json5');
 import { ScanError, SyntaxKind, JSONScanner } from '../main';
 
 /**
@@ -23,29 +24,6 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		prevTokenLineStartOffset = 0,
 		scanError: ScanError = ScanError.None;
 
-	function scanHexDigits(count?: number): number | undefined {
-		let digits = 0;
-		let value = undefined;
-		do {
-			let ch = text.charCodeAt(pos);
-			if (ch >= CharacterCodes._0 && ch <= CharacterCodes._9) {
-				value = (value || 0) * 16 + ch - CharacterCodes._0;
-			}
-			else if (ch >= CharacterCodes.A && ch <= CharacterCodes.F) {
-				value = (value || 0) * 16 + ch - CharacterCodes.A + 10;
-			}
-			else if (ch >= CharacterCodes.a && ch <= CharacterCodes.f) {
-				value = (value || 0) * 16 + ch - CharacterCodes.a + 10;
-			}
-			else {
-				break;
-			}
-			pos++;
-			digits++;
-		} while (value != undefined || (!count || digits >= count))
-		return value;
-	}
-
 	function setPosition(newPosition: number) {
 		pos = newPosition;
 		value = '';
@@ -61,10 +39,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	type ScanFailure = {
 		kind: 'failure';
 		error: Error;
+		consumed: string;
 	};
 	type ScanResult = ScanSuccess | ScanFailure;
 
 	type Scanner = (input: string) => ScanResult;
+
+	function isSuccess(result: ScanResult): result is ScanSuccess {
+		return result.kind === 'success' && typeof result.lexeme === 'string';
+	}
 
 	function isFailure(result: ScanResult): result is ScanFailure {
 		return result.kind === 'failure' && result.error instanceof Error;
@@ -80,7 +63,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			} else {
 				return {
 					kind: 'failure',
-					error: new Error(`Unable to scan literal "${text}" from "${input}"`)
+					error: new Error(`Unable to scan literal "${text}" from "${input}"`),
+					consumed: ''
 				} as const;
 			}
 		};
@@ -91,10 +75,18 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	}
 
 	function combineAnd(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
-		if (isFailure(firstResult)) {
+		if (isFailure(firstResult) && isFailure(secondResult)) {
+			return {
+				...firstResult,
+				consumed: firstResult.consumed + secondResult.consumed
+			};
+		} else if (isFailure(firstResult)) {
 			return firstResult;
 		} else if (isFailure(secondResult)) {
-			return secondResult;
+			return {
+				...secondResult,
+				consumed: firstResult.lexeme + secondResult.consumed
+			};
 		} else {
 			return {
 				kind: 'success',
@@ -105,7 +97,13 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 
 	/** This function is greedy; if both succeeded, return the longer result. */
 	function combineOr(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
-		if (isFailure(secondResult)) {
+		if (isFailure(firstResult) && isFailure(secondResult)) {
+			if (firstResult.consumed >= secondResult.consumed) {
+				return firstResult;
+			} else {
+				return secondResult;
+			}
+		} else if (isFailure(secondResult)) {
 			return firstResult;
 		} else if (isFailure(firstResult)) {
 			return secondResult;
@@ -201,6 +199,47 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		return scanOptional;
 	}
 
+	function butNot(scanner: Scanner, not: Scanner): Scanner {
+		const scanButNot = (input: string) => {
+			const result = scanner(input);
+			if (isSuccess(result)) {
+				if (isSuccess(not(input))) {
+					return {
+						kind: 'failure',
+						error: new Error(`Matched ${scanner.name} but also matched ${not.name} with "${input}"`),
+						consumed: result.lexeme
+					} as const
+				}
+			}
+			return result;
+		};
+		Object.defineProperty(scanButNot, 'name', {
+			value: `butNot(${scanner.name}, ${not.name})`
+		});
+		return scanButNot;
+	}
+
+	function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
+		const scanLookaheadNot = (input: string) => {
+			const result = scanner(input);
+			if (isSuccess(result)) {
+				const remainingInput = input.substring(result.lexeme.length);
+				if (isSuccess(notFollowedBy(remainingInput))) {
+					return {
+						kind: 'failure',
+						error: new Error(`Lookahead detected invalid input "${input}"`),
+						consumed: result.lexeme
+					} as const
+				}
+			}
+			return result;
+		};
+		Object.defineProperty(scanLookaheadNot, 'name', {
+			value: `lookaheadNot(${scanner.name}, ${notFollowedBy.name})`
+		});
+		return scanLookaheadNot;
+	}
+
 	function scanNothing(input: string): ScanResult {
 		return {
 			kind: 'success',
@@ -224,7 +263,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan hex digit from "${input}"`)
+				error: new Error(`Unable to scan hex digit from "${input}"`),
+				consumed: ''
 			};
 		}
 	}
@@ -241,7 +281,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan decimal digit from "${input}"`)
+				error: new Error(`Unable to scan decimal digit from "${input}"`),
+				consumed: ''
 			};
 		}
 	}
@@ -258,7 +299,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan non-zero digit from "${input}"`)
+				error: new Error(`Unable to scan non-zero digit from "${input}"`),
+				consumed: ''
 			};
 		}
 	}
@@ -275,7 +317,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan exponent indicator from "${input}"`)
+				error: new Error(`Unable to scan exponent indicator from "${input}"`),
+				consumed: ''
 			};
 		}
 	}
@@ -351,102 +394,191 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		return or(scanJSON5NumericLiteral, and(literal('+'), scanJSON5NumericLiteral), and(literal('-'), scanJSON5NumericLiteral))(input);
 	}
 
-	function scanString(delimiter: CharacterCodes): string {
+	// LineTerminator ::
+	// 	<LF>
+	// 	<CR>
+	// 	<LS>
+	// 	<PS>
+	function scanLineTerminator(input: string): ScanResult {
+		return or(literal('\n'), literal('\r'), literal('\u2028'), literal('\u2029'))(input);
+	}
 
-		let result = '',
-			start = pos;
+	// LineTerminatorSequence ::
+	// 	<LF>
+	// 	<CR> [lookahead ∉ <LF> ]
+	// 	<LS>
+	// 	<PS>
+	// 	<CR> <LF>
+	function scanLineTerminatorSequence(input: string): ScanResult {
+		return or(
+			literal('\n'),
+			lookaheadNot(literal('\r'), literal('\n')),
+			literal('\u2028'),
+			literal('\r\n')
+		)(input);
+	}
 
-		while (true) {
-			if (pos >= len) {
-				result += text.substring(start, pos);
-				scanError = ScanError.UnexpectedEndOfString;
-				break;
+	// LineContinuation ::
+	// 	\ LineTerminatorSequence
+	function scanLineContinuation(input: string): ScanResult {
+		return and(literal('\\'), scanLineTerminatorSequence)(input);
+	}
+
+	// HexEscapeSequence ::
+	// 	x HexDigit HexDigit
+	function scanHexEscapeSequence(input: string): ScanResult {
+		return and(literal('x'), scanHexDigit, scanHexDigit)(input);
+	}
+
+	// UnicodeEscapeSequence ::
+	// 	u HexDigit HexDigit HexDigit HexDigit
+	function scanUnicodeEscapeSequence(input: string): ScanResult {
+		return and(literal('u'), scanHexDigit, scanHexDigit, scanHexDigit, scanHexDigit)(input);
+	}
+
+	// EscapeCharacter ::
+	// 	SingleEscapeCharacter
+	// 	DecimalDigit
+	// 	x
+	// 	u
+	function scanEscapeCharacter(input: string): ScanResult {
+		return or(
+			scanSingleEscapeCharacter,
+			scanDecimalDigit,
+			literal('x'),
+			literal('u')
+		)(input);
+	}
+
+	// SingleEscapeCharacter :: one of
+	// 	' " \ b f n r t v
+	function scanSingleEscapeCharacter(input: string): ScanResult {
+		return or(
+			literal("'"),
+			literal('"'),
+			literal('\\'),
+			literal('b'),
+			literal('f'),
+			literal('n'),
+			literal('r'),
+			literal('t'),
+			literal('v')
+		)(input);
+	}
+
+	// SourceCharacter ::
+	// 	any Unicode code unit
+	function scanSourceCharacter(input: string): ScanResult {
+		const codePoint = input.codePointAt(0);
+		if (codePoint !== undefined) {
+			return {
+				kind: 'success',
+				lexeme: String.fromCodePoint(codePoint)
+			};
+		} else {
+			return {
+				kind: 'failure',
+				error: new Error(`Unable to scan source character from "${input}"`),
+				consumed: ''
+			};
+		}
+	}
+
+	// NonEscapeCharacter ::
+	// 	SourceCharacter but not one of EscapeCharacter or LineTerminator
+	function scanNonEscapeCharacter(input: string): ScanResult {
+		const result = scanSourceCharacter(input);
+		if (isSuccess(result)) {
+			if (isSuccess(scanEscapeCharacter(input))) {
+				return {
+					kind: 'failure',
+					error: new Error(`Scanned escape character when trying to scan non-escape character from "${input}"`),
+					consumed: ''
+				};
+			} else if (isSuccess(scanLineTerminator(input))) {
+				return {
+					kind: 'failure',
+					error: new Error(`Scanned line terminator when trying to scan non-escape character from "${input}"`),
+					consumed: ''
+				};
 			}
-			const ch = text.charCodeAt(pos);
-			if (ch === delimiter) {
-				result += text.substring(start, pos);
-				pos++;
-				break;
-			}
-			if (ch === CharacterCodes.backslash) {
-				result += text.substring(start, pos);
-				pos++;
-				if (pos >= len) {
-					scanError = ScanError.UnexpectedEndOfString;
-					break;
-				}
-				const ch2 = text.charCodeAt(pos++);
-				switch (ch2) {
-					case CharacterCodes.lineFeed:
-					case CharacterCodes.lineSeparator:
-					case CharacterCodes.paragraphSeparator:
-						break;
-					case CharacterCodes.carriageReturn:
-						const ch3 = text.charCodeAt(pos++);
-						if (ch3 === CharacterCodes.lineFeed) {
-							pos++;
-						}
-						break;
-					case CharacterCodes.doubleQuote:
-						result += '\"';
-						break;
-					case CharacterCodes.singleQuote:
-						result += '\'';
-						break;
-					case CharacterCodes.backslash:
-						result += '\\';
-						break;
-					case CharacterCodes.slash:
-						result += '/';
-						break;
-					case CharacterCodes.b:
-						result += '\b';
-						break;
-					case CharacterCodes.f:
-						result += '\f';
-						break;
-					case CharacterCodes.n:
-						result += '\n';
-						break;
-					case CharacterCodes.r:
-						result += '\r';
-						break;
-					case CharacterCodes.t:
-						result += '\t';
-						break;
-					case CharacterCodes.v:
-						result += '\v';
-						break;
-					case CharacterCodes._0:
-						result += '\0';
-						break;
-					case CharacterCodes.u:
-						const hex = scanHexDigits(4);
-						if (hex !== undefined) {
-							result += String.fromCharCode(hex);
-						} else {
-							scanError = ScanError.InvalidUnicode;
-						}
-						break;
-					default:
-						scanError = ScanError.InvalidEscapeCharacter;
-				}
-				start = pos;
-				continue;
-			}
-			if (ch >= 0 && ch <= 0x1f) {
-				if (isLineBreak(ch)) {
-					result += text.substring(start, pos);
-					scanError = ScanError.UnexpectedEndOfString;
-					break;
-				} else {
-					scanError = ScanError.InvalidCharacter;
-					// mark as error but continue with string
-				}
-			}
-			pos++;
 		}
 		return result;
+	}
+
+	// CharacterEscapeSequence ::
+	// 	SingleEscapeCharacter
+	// 	NonEscapeCharacter
+	function scanCharacterEscapeSequence(input: string): ScanResult {
+		return or(scanSingleEscapeCharacter, scanNonEscapeCharacter)(input);
+	}
+
+	// EscapeSequence ::
+	// 	CharacterEscapeSequence
+	// 	0 [lookahead ∉ DecimalDigit]
+	// 	HexEscapeSequence
+	// 	UnicodeEscapeSequence
+	function scanEscapeSequence(input: string): ScanResult {
+		return or(
+			scanCharacterEscapeSequence,
+			lookaheadNot(literal('0'), scanDecimalDigit),
+			scanHexEscapeSequence,
+			scanUnicodeEscapeSequence
+		)(input);
+	}
+
+	// JSON5SingleStringCharacter::
+	// 	SourceCharacter but not one of ' or \ or LineTerminator
+	// 	\ EscapeSequence
+	// 	LineContinuation
+	// 	U+2028
+	// 	U+2029
+	function scanJSON5SingleStringCharacter(input: string): ScanResult {
+		return or(
+			butNot(scanSourceCharacter, or(literal("'"), literal('\\'), scanLineTerminator)),
+			and(literal('\\'), scanEscapeSequence),
+			scanLineContinuation,
+			literal('\u2028'),
+			literal('\u2029')
+		)(input);
+	}
+
+	// JSON5DoubleStringCharacter::
+	// 	SourceCharacter but not one of " or \ or LineTerminator
+	// 	\ EscapeSequence
+	// 	LineContinuation
+	// 	U+2028
+	// 	U+2029
+	function scanJSON5DoubleStringCharacter(input: string): ScanResult {
+		return or(
+			butNot(scanSourceCharacter, or(literal('"'), literal('\\'), scanLineTerminator)),
+			and(literal('\\'), scanEscapeSequence),
+			scanLineContinuation,
+			literal('\u2028'),
+			literal('\u2029')
+		)(input);
+	}
+
+	// JSON5SingleStringCharacters::
+	// 	JSON5SingleStringCharacter JSON5SingleStringCharacters(opt)
+	function scanJSON5SingleStringCharacters(input: string): ScanResult {
+		return oneOrMore(scanJSON5SingleStringCharacter)(input);
+	}
+
+	// JSON5DoubleStringCharacters::
+	// 	JSON5DoubleStringCharacter JSON5DoubleStringCharacters(opt)
+	function scanJSON5DoubleStringCharacters(input: string): ScanResult {
+		return oneOrMore(scanJSON5DoubleStringCharacter)(input);
+	}
+
+	// JSON5String::
+	// 	"JSON5DoubleStringCharacters(opt)"
+	// 	'JSON5SingleStringCharacters(opt)'
+	function scanJSON5String(input: string): ScanResult {
+		return or(
+			and(literal('"'), zeroOrMore(scanJSON5DoubleStringCharacters), literal('"')),
+			and(literal("'"), zeroOrMore(scanJSON5SingleStringCharacters), literal("'"))
+		)(input);
 	}
 
 	function scanNext(): SyntaxKind {
@@ -489,6 +621,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			return token = SyntaxKind.LineBreakTrivia;
 		}
 
+		let scanResult: ScanResult
 		switch (code) {
 			// tokens: []{}:,
 			case CharacterCodes.openBrace:
@@ -512,13 +645,18 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 
 			// strings
 			case CharacterCodes.doubleQuote:
-				pos++;
-				value = scanString(CharacterCodes.doubleQuote);
-				return token = SyntaxKind.StringLiteral;
 			case CharacterCodes.singleQuote:
-				pos++;
-				value = scanString(CharacterCodes.singleQuote);
-				return token = SyntaxKind.StringLiteral;
+				scanResult = scanJSON5String(text.substring(pos));
+				if (isFailure(scanResult)) {
+					pos += scanResult.consumed.length;
+					scanError = ScanError.UnexpectedEndOfString;
+					return (token = SyntaxKind.StringLiteral);
+				} else {
+					scanError = ScanError.None;
+					value = JSON5.parse(scanResult.lexeme);
+					pos += scanResult.lexeme.length;
+					return (token = SyntaxKind.StringLiteral);
+				}
 
 			// comments
 			case CharacterCodes.slash:
@@ -592,7 +730,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes._7:
 			case CharacterCodes._8:
 			case CharacterCodes._9:
-				const scanResult = scanJSON5Number(text.substring(pos));
+				scanResult = scanJSON5Number(text.substring(pos));
 				if (isFailure(scanResult)) {
 					pos++;
 					scanError = ScanError.None;
