@@ -74,6 +74,32 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		return scanLiteral;
 	}
 
+	function match(pattern: RegExp): Scanner {
+		const scanMatch = (input: string) => {
+			const match = pattern.exec(input);
+			if (match !== null && match.index === 0) {
+				return {
+					kind: 'success',
+					lexeme: match[0]
+				} as const;
+			} else {
+				return {
+					kind: 'failure',
+					error: new Error(`Unable to scan match ${pattern} from "${input}"`),
+					consumed: ''
+				} as const;
+			}
+		};
+		Object.defineProperty(scanMatch, 'name', {
+			value: `match(${pattern})`
+		});
+		return scanMatch;
+	}
+
+	function complete(scanner: Scanner): Scanner {
+		return and(scanner, scanEmpty);
+	}
+
 	function combineAnd(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
 		if (isFailure(firstResult) && isFailure(secondResult)) {
 			return {
@@ -247,80 +273,43 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		};
 	}
 
-	// HexDigit :: one of
-	// 	0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F
-	function scanHexDigit(input: string): ScanResult {
-		const ch = input.charCodeAt(0);
-		if (
-			(ch >= CharacterCodes._0 && ch <= CharacterCodes._9) ||
-			(ch >= CharacterCodes.A && ch <= CharacterCodes.F) ||
-			(ch >= CharacterCodes.a && ch <= CharacterCodes.f)
-		) {
+	function scanEmpty(input: string): ScanResult {
+		if (input.length === 0) {
 			return {
 				kind: 'success',
-				lexeme: String.fromCharCode(ch)
+				lexeme: ''
 			};
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan hex digit from "${input}"`),
+				error: new Error(`Input "${input}" was not empty`),
 				consumed: ''
 			};
 		}
+	}
+
+	// HexDigit :: one of
+	// 	0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F
+	function scanHexDigit(input: string): ScanResult {
+		return match(/^[0-9a-fA-F]/)(input);
 	}
 
 	// DecimalDigit :: one of
 	// 	0 1 2 3 4 5 6 7 8 9
 	function scanDecimalDigit(input: string): ScanResult {
-		const ch = input.charCodeAt(0);
-		if (ch >= CharacterCodes._0 && ch <= CharacterCodes._9) {
-			return {
-				kind: 'success',
-				lexeme: String.fromCharCode(ch)
-			};
-		} else {
-			return {
-				kind: 'failure',
-				error: new Error(`Unable to scan decimal digit from "${input}"`),
-				consumed: ''
-			};
-		}
+		return match(/^[0-9]/)(input);
 	}
 
 	// NonZeroDigit :: one of
 	// 	1 2 3 4 5 6 7 8 9
 	function scanNonZeroDigit(input: string): ScanResult {
-		const ch = input.charCodeAt(0);
-		if (ch >= CharacterCodes._1 && ch <= CharacterCodes._9) {
-			return {
-				kind: 'success',
-				lexeme: String.fromCharCode(ch)
-			};
-		} else {
-			return {
-				kind: 'failure',
-				error: new Error(`Unable to scan non-zero digit from "${input}"`),
-				consumed: ''
-			};
-		}
+		return match(/^[1-9]/)(input);
 	}
 
 	// ExponentIndicator :: one of
 	// 	e E
 	function scanExponentIndicator(input: string): ScanResult {
-		const ch = input.charCodeAt(0);
-		if (ch === CharacterCodes.e || ch === CharacterCodes.E) {
-			return {
-				kind: 'success',
-				lexeme: String.fromCharCode(ch)
-			};
-		} else {
-			return {
-				kind: 'failure',
-				error: new Error(`Unable to scan exponent indicator from "${input}"`),
-				consumed: ''
-			};
-		}
+		return or(literal('e'), literal('E'))(input);
 	}
 
 	// HexIntegerLiteral ::
@@ -581,6 +570,214 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		)(input);
 	}
 
+	// BooleanLiteral ::
+	// 	true
+	// 	false
+	function scanBooleanLiteral(input: string): ScanResult {
+		return or(literal('true'), literal('false'))(input);
+	}
+
+	// JSON5Boolean ::
+	// 	BooleanLiteral
+	function scanJSON5Boolean(input: string): ScanResult {
+		return scanBooleanLiteral(input);
+	}
+
+	// NullLiteral ::
+	// 	null
+	function scanNullLiteral(input: string): ScanResult {
+		return literal('null')(input);
+	}
+
+	// JSON5Null ::
+	//	NullLiteral
+	function scanJSON5Null(input: string): ScanResult {
+		return scanNullLiteral(input);
+	}
+
+	// JSON5Punctuator :: one of
+	//	{ } [ ] : ,
+	function scanJSON5Punctuator(input: string): ScanResult {
+		return or(
+			literal('{'),
+			literal('}'),
+			literal('['),
+			literal(']'),
+			literal(':'),
+			literal(',')
+		)(input);
+	}
+
+	// UnicodeConnectorPunctuation ::
+	// 	any character in the Unicode category "Connector punctuation (Pc)"
+	function scanUnicodeConnectorPunctuation(input: string): ScanResult {
+		return match(/^\p{Pc}/u)(input);
+	}
+
+	// UnicodeDigit ::
+	// 	any character in the Unicode category "Decimal number (Nd)"
+	function scanUnicodeDigit(input: string): ScanResult {
+		return match(/^\p{Nd}/u)(input);
+	}
+
+	// UnicodeCombiningMark ::
+	// 	any character in the Unicode categories "Non-spacing mark (Mn)" or "Combining spacing mark (Mc)"
+	function scanUnicodeCombiningMark(input: string): ScanResult {
+		return match(/^\p{Mn}|^\p{Mc}/u)(input);
+	}
+
+	// UnicodeLetter ::
+	// 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other letter (Lo)", or "Letter number (Nl)".
+	function scanUnicodeLetter(input: string): ScanResult {
+		return match(/^\p{Lu}|^\p{Ll}|^\p{Lt}|^\p{Lm}|^\p{Lo}|^\p{Nl}/u)(input);
+	}
+
+	// IdentifierStart ::
+	// 	UnicodeLetter
+	// 	$
+	// 	_
+	// 	\ UnicodeEscapeSequence
+	function scanIdentifierStart(input: string): ScanResult {
+		return or(
+			scanUnicodeLetter,
+			literal('$'),
+			literal('_'),
+			and(literal('\\'), scanUnicodeEscapeSequence)
+		)(input);
+	}
+
+	// IdentifierPart ::
+	// 	IdentifierStart
+	// 	UnicodeCombiningMark
+	// 	UnicodeDigit
+	// 	UnicodeConnectorPunctuation
+	// 	<ZWNJ>
+	// 	<ZWJ>
+	function scanIdentifierPart(input: string): ScanResult {
+		return or(
+			scanIdentifierStart,
+			scanUnicodeCombiningMark,
+			scanUnicodeDigit,
+			scanUnicodeConnectorPunctuation,
+			literal('\u200C'),
+			literal('\u200D')
+		)(input);
+	}
+
+	// IdentifierName ::
+	// 	IdentifierStart
+	// 	IdentifierName IdentifierPart
+	function scanIdentifierName(input: string): ScanResult {
+		return or(scanIdentifierStart, and(scanIdentifierName, scanIdentifierPart))(input);
+	}
+
+	// JSON5Identifier ::
+	//	IdentifierName
+	function scanJSON5Identifier(input: string): ScanResult {
+		return scanIdentifierName(input);
+	}
+
+	// JSON5Token ::
+	// 	JSON5Identifier
+	// 	JSON5Punctuator
+	// 	JSON5String
+	// 	JSON5Number
+	function scanJSON5Token(input: string): ScanResult {
+		return or(scanJSON5Identifier, scanJSON5Punctuator, scanJSON5String, scanJSON5Number)(input);
+	}
+
+	// SingleLineCommentChar ::
+	// 	SourceCharacter but not LineTerminator
+	function scanSingleLineCommentChar(input: string): ScanResult {
+		return butNot(scanSourceCharacter, scanLineTerminator)(input);
+	}
+
+	// SingleLineCommentChars ::
+	// 	SingleLineCommentChar SingleLineCommentChars(opt)
+	function scanSingleLineCommentChars(input: string): ScanResult {
+		return and(scanSingleLineCommentChar, optional(scanSingleLineCommentChars))(input);
+	}
+
+	// SingleLineComment ::
+	// 	// SingleLineCommentChars(opt)
+	function scanSingleLineComment(input: string): ScanResult {
+		return and(literal('//'), optional(scanSingleLineCommentChars))(input);
+	}
+
+	// MultiLineNotForwardSlashOrAsteriskChar ::
+	// 	SourceCharacter but not one of / or *
+	function scanMultiLineNotForwardSlashOrAsteriskChar(input: string): ScanResult {
+		return butNot(scanSourceCharacter, or(literal('/'), literal('*')))(input);
+	}
+
+	// MultiLineNotAsteriskChar ::
+	// 	SourceCharacter but not *
+	function scanMultiLineNotAsteriskChar(input: string): ScanResult {
+		return butNot(scanSourceCharacter, literal('*'))(input);
+	}
+
+	// PostAsteriskCommentChars ::
+	// 	MultiLineNotForwardSlashOrAsteriskChar MultiLineCommentChars(opt)
+	// 	* PostAsteriskCommentChars(opt)
+	function scanPostAsteriskCommentChars(input: string): ScanResult {
+		return or(
+			and(scanMultiLineNotForwardSlashOrAsteriskChar, optional(scanMultiLineCommentChars)),
+			and(literal('*'), optional(scanPostAsteriskCommentChars))
+		)(input);
+	}
+
+	// MultiLineCommentChars ::
+	// 	MultiLineNotAsteriskChar MultiLineCommentChars(opt)
+	// 	* PostAsteriskCommentChars(opt)
+	function scanMultiLineCommentChars(input: string): ScanResult {
+		return or(
+			and(scanMultiLineNotAsteriskChar, optional(scanMultiLineCommentChars)),
+			and(literal('*'), optional(scanPostAsteriskCommentChars))
+		)(input);
+	}
+
+	// MultiLineComment ::
+	// 	/* MultiLineCommentChars(opt) */
+	function scanMultiLineComment(input: string): ScanResult {
+		return and(literal('/*'), optional(scanMultiLineCommentChars), literal('*/'))(input);
+	}
+
+	// Comment ::
+	// 	MultiLineComment
+	// 	SingleLineComment
+	function scanComment(input: string): ScanResult {
+		return or(scanMultiLineComment, scanSingleLineComment)(input);
+	}
+
+	// WhiteSpace ::
+	// 	<TAB>
+	// 	<VT>
+	// 	<FF>
+	// 	<SP>
+	// 	<NBSP>
+	// 	<BOM>
+	// 	<USP>
+	function scanWhiteSpace(input: string): ScanResult {
+		return or(
+			literal('\t'),
+			literal('\u000B'),
+			literal('\u000C'),
+			literal('\u0020'),
+			literal('\u00A0'),
+			literal('\uFEFF'),
+			match(/^\p{Zs}/u)
+		)(input);
+	}
+
+	// JSON5InputElement ::
+	// 	WhiteSpace
+	// 	LineTerminator
+	// 	Comment
+	// 	JSON5Token
+	function scanJSON5InputElement(input: string): ScanResult {
+		return or(scanWhiteSpace, scanLineTerminator, scanComment, scanJSON5Token)(input);
+	}
+
 	function scanNext(): SyntaxKind {
 
 		value = '';
@@ -751,23 +948,17 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				}
 				if (tokenOffset !== pos) {
 					value = text.substring(tokenOffset, pos);
-					// keywords: true, false, null
-					switch (value) {
-						case 'true':
-							return (token = SyntaxKind.TrueKeyword);
-						case 'false':
-							return (token = SyntaxKind.FalseKeyword);
-						case 'null':
-							return (token = SyntaxKind.NullKeyword);
-					}
-					// or maybe it's one of the JSON5 literals
-					// TODO: handle this more gracefully
-					const scanResult = scanJSON5Number(value);
-					if (!isFailure(scanResult)) {
-						scanError = ScanError.None;
+					if (!isFailure(complete(literal('true'))(value))) {
+						return (token = SyntaxKind.TrueKeyword);
+					} else if (!isFailure(complete(literal('false'))(value))) {
+						return (token = SyntaxKind.FalseKeyword);
+					} else if (!isFailure(complete(literal('null'))(value))) {
+						return (token = SyntaxKind.NullKeyword);
+					} else if (!isFailure(complete(scanJSON5Number)(value))) {
 						return (token = SyntaxKind.NumericLiteral);
+					} else {
+						return (token = SyntaxKind.Unknown);
 					}
-					return (token = SyntaxKind.Unknown);
 				}
 				// some
 				value += String.fromCharCode(code);
