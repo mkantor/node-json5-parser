@@ -624,6 +624,12 @@ suite('JSON5', () => {
 		assertKinds('/* this is a comment*/', SyntaxKind.BlockCommentTrivia);
 		assertKinds('/* this is a \r\ncomment*/', SyntaxKind.BlockCommentTrivia);
 		assertKinds('/* this is a \ncomment*/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/**/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/***/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/****/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/** */', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/* **/', SyntaxKind.BlockCommentTrivia);
+		assertKinds('/* * */', SyntaxKind.BlockCommentTrivia);
 
 		// unexpected end
 		assertScanError('/* this is a', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);

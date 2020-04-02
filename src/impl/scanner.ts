@@ -802,10 +802,11 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	MultiLineNotAsteriskChar MultiLineCommentChars(opt)
 	// 	* PostAsteriskCommentChars(opt)
 	function scanMultiLineCommentChars(input: string): ScanResult {
-		return or(
-			and(scanMultiLineNotAsteriskChar, optional(scanMultiLineCommentChars)),
-			and(literal('*'), optional(scanPostAsteriskCommentChars))
-		)(input);
+		// Note: this doesn't exactly follow the grammar because the final '*' from
+		// '*/' should not be part of the lexeme.
+		return oneOrMore(or(scanMultiLineNotAsteriskChar, lookaheadNot(literal('*'), literal('/'))))(
+			input
+		);
 	}
 
 	// MultiLineComment ::
@@ -940,56 +941,20 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 
 			// comments
 			case CharacterCodes.slash:
-				const start = pos - 1;
 				// Single-line comment
 				if (text.charCodeAt(pos + 1) === CharacterCodes.slash) {
-					pos += 2;
-
-					while (pos < len) {
-						if (isLineBreak(text.charCodeAt(pos))) {
-							break;
-						}
-						pos++;
-
-					}
-					value = text.substring(start, pos);
-					return token = SyntaxKind.LineCommentTrivia;
+					scanResult = scanSingleLineComment(text.substring(pos));
+					nextState = computeNextScanState(currentState, scanResult, SyntaxKind.LineCommentTrivia);
+					updateState(nextState);
+					return token;
 				}
 
 				// Multi-line comment
 				if (text.charCodeAt(pos + 1) === CharacterCodes.asterisk) {
-					pos += 2;
-
-					const safeLength = len - 1; // For lookahead.
-					let commentClosed = false;
-					while (pos < safeLength) {
-						const ch = text.charCodeAt(pos);
-
-						if (ch === CharacterCodes.asterisk && text.charCodeAt(pos + 1) === CharacterCodes.slash) {
-							pos += 2;
-							commentClosed = true;
-							break;
-						}
-
-						pos++;
-
-						if (isLineBreak(ch)) {
-							if (ch === CharacterCodes.carriageReturn && text.charCodeAt(pos) === CharacterCodes.lineFeed) {
-								pos++;
-							}
-
-							lineNumber++;
-							tokenLineStartOffset = pos;
-						}
-					}
-					
-					if (!commentClosed) {
-						pos++;
-						scanError = ScanError.UnexpectedEndOfComment;
-					}
-
-					value = text.substring(start, pos);
-					return token = SyntaxKind.BlockCommentTrivia;
+					scanResult = scanMultiLineComment(text.substring(pos));
+					nextState = computeNextScanState(currentState, scanResult, SyntaxKind.BlockCommentTrivia);
+					updateState(nextState);
+					return token;
 				}
 				// just a single slash
 				value += String.fromCharCode(code);
