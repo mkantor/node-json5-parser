@@ -13,6 +13,15 @@ import { ScanError, SyntaxKind, JSONScanner } from '../main';
  */
 export function createScanner(text: string, ignoreTrivia: boolean = false): JSONScanner {
 
+	type ScanState = {
+		token: SyntaxKind;
+		value: string;
+		scanError: ScanError;
+		pos: number;
+		lineNumber: number;
+		tokenLineStartOffset: number;
+	}
+
 	const len = text.length;
 	let pos = 0,
 		value: string = '',
@@ -23,6 +32,69 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		tokenLineStartOffset = 0,
 		prevTokenLineStartOffset = 0,
 		scanError: ScanError = ScanError.None;
+
+	function computeNextScanState(previousState: ScanState, scanResult: ScanResult, token: SyntaxKind): ScanState {
+		const consumed = isFailure(scanResult) ? scanResult.consumed : scanResult.lexeme;
+		const pos = previousState.pos + consumed.length;
+
+		// Determine the position of the parsed token.
+		let tokenLineStartOffset = previousState.tokenLineStartOffset;
+		let lineNumber = previousState.lineNumber;
+		let skip = 1;
+		for (let index = 0; index < consumed.length; index += skip) {
+			const lineBreak = scanLineTerminatorSequence(consumed.slice(index));
+			if (isSuccess(lineBreak)) {
+				skip = lineBreak.lexeme.length;
+				lineNumber++;
+				tokenLineStartOffset = previousState.pos + index + lineBreak.lexeme.length;
+			} else {
+				skip = 1;
+			}
+		}
+
+		const intermediateState = {
+			...previousState,
+			token,
+			pos,
+			lineNumber,
+			tokenLineStartOffset
+		};
+
+		if (token === SyntaxKind.StringLiteral) {
+			return isFailure(scanResult)
+				? {
+						...intermediateState,
+						scanError: ScanError.UnexpectedEndOfString
+				  }
+				: {
+						...intermediateState,
+						value: JSON5.parse(scanResult.lexeme)
+				  };
+		} else if (token === SyntaxKind.NumericLiteral) {
+			return isFailure(scanResult)
+				? {
+						...intermediateState,
+						token: SyntaxKind.Unknown
+				  }
+				: {
+						...intermediateState,
+						value: scanResult.lexeme
+				  };
+		} else if (token === SyntaxKind.LineCommentTrivia || token === SyntaxKind.BlockCommentTrivia) {
+			return isFailure(scanResult)
+				? {
+						...intermediateState,
+						scanError: ScanError.UnexpectedEndOfComment
+				  }
+				: {
+						...intermediateState,
+						value: scanResult.lexeme
+				  };
+		} else {
+			// TODO
+			throw new Error('Not all token types have been implemented yet!');
+		}
+	}
 
 	function setPosition(newPosition: number) {
 		pos = newPosition;
@@ -787,6 +859,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		lineStartOffset = lineNumber;
 		prevTokenLineStartOffset = tokenLineStartOffset;
 
+		const updateState = (state: ScanState): void => {
+			token = state.token;
+			value = state.value;
+			scanError = state.scanError;
+			pos = state.pos;
+			lineNumber = state.lineNumber;
+			tokenLineStartOffset = state.tokenLineStartOffset;
+		};
+
 		if (pos >= len) {
 			// at the end
 			tokenOffset = len;
@@ -818,7 +899,16 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			return token = SyntaxKind.LineBreakTrivia;
 		}
 
-		let scanResult: ScanResult
+		const currentState: ScanState = {
+			token,
+			value,
+			scanError,
+			pos,
+			lineNumber,
+			tokenLineStartOffset
+		};
+		let nextState: ScanState;
+		let scanResult: ScanResult;
 		switch (code) {
 			// tokens: []{}:,
 			case CharacterCodes.openBrace:
@@ -844,16 +934,9 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes.doubleQuote:
 			case CharacterCodes.singleQuote:
 				scanResult = scanJSON5String(text.substring(pos));
-				if (isFailure(scanResult)) {
-					pos += scanResult.consumed.length;
-					scanError = ScanError.UnexpectedEndOfString;
-					return (token = SyntaxKind.StringLiteral);
-				} else {
-					scanError = ScanError.None;
-					value = JSON5.parse(scanResult.lexeme);
-					pos += scanResult.lexeme.length;
-					return (token = SyntaxKind.StringLiteral);
-				}
+				nextState = computeNextScanState(currentState, scanResult, SyntaxKind.StringLiteral);
+				updateState(nextState);
+				return token;
 
 			// comments
 			case CharacterCodes.slash:
@@ -928,16 +1011,9 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes._8:
 			case CharacterCodes._9:
 				scanResult = scanJSON5Number(text.substring(pos));
-				if (isFailure(scanResult)) {
-					pos++;
-					scanError = ScanError.None;
-					return (token = SyntaxKind.Unknown);
-				} else {
-					scanError = ScanError.None;
-					value = scanResult.lexeme;
-					pos += scanResult.lexeme.length;
-					return (token = SyntaxKind.NumericLiteral);
-				}
+				nextState = computeNextScanState(currentState, scanResult, SyntaxKind.NumericLiteral);
+				updateState(nextState);
+				return token;
 
 			// literals and unknown symbols
 			default:
@@ -948,13 +1024,13 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				}
 				if (tokenOffset !== pos) {
 					value = text.substring(tokenOffset, pos);
-					if (!isFailure(complete(literal('true'))(value))) {
+					if (isSuccess(complete(literal('true'))(value))) {
 						return (token = SyntaxKind.TrueKeyword);
-					} else if (!isFailure(complete(literal('false'))(value))) {
+					} else if (isSuccess(complete(literal('false'))(value))) {
 						return (token = SyntaxKind.FalseKeyword);
-					} else if (!isFailure(complete(literal('null'))(value))) {
+					} else if (isSuccess(complete(literal('null'))(value))) {
 						return (token = SyntaxKind.NullKeyword);
-					} else if (!isFailure(complete(scanJSON5Number)(value))) {
+					} else if (isSuccess(complete(scanJSON5Number)(value))) {
 						return (token = SyntaxKind.NumericLiteral);
 					} else {
 						return (token = SyntaxKind.Unknown);
