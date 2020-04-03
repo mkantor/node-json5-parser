@@ -128,6 +128,7 @@ export function format(documentText: string, range: Range | undefined, options: 
 						break;
 					}
 				// fall through
+				case SyntaxKind.Identifier:
 				case SyntaxKind.NullKeyword:
 				case SyntaxKind.TrueKeyword:
 				case SyntaxKind.FalseKeyword:

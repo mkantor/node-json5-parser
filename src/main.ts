@@ -54,7 +54,10 @@ export const enum SyntaxKind {
 	LineBreakTrivia = 14,
 	Trivia = 15,
 	Unknown = 16,
-	EOF = 17
+	EOF = 17,
+	Identifier = 18,
+	InfinityKeyword = 19,
+	NaNKeyword = 20
 }
 
 export function printSyntaxKind(code: SyntaxKind): string {
@@ -76,6 +79,9 @@ export function printSyntaxKind(code: SyntaxKind): string {
 		case SyntaxKind.Trivia: return 'Trivia';
 		case SyntaxKind.Unknown: return 'Unknown';
 		case SyntaxKind.EOF: return 'EOF';
+		case SyntaxKind.Identifier: return 'Identifier';
+		case SyntaxKind.InfinityKeyword: return 'InfinityKeyword';
+		case SyntaxKind.NaNKeyword: return 'NaNKeyword';
 	}
 }
 

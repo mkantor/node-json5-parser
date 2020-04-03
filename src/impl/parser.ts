@@ -480,9 +480,18 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		return true;
 	}
 
+	function parseIdentifier(): boolean {
+		const value = _scanner.getTokenValue();
+		onObjectProperty(value);
+		scanNext();
+		return true;
+	}
+
 	function parseLiteral(): boolean {
 		switch (_scanner.getToken()) {
 			case SyntaxKind.NumericLiteral:
+			case SyntaxKind.InfinityKeyword:
+			case SyntaxKind.NaNKeyword:
 				let value = 0;
 				try {
 					value = JSON5.parse(_scanner.getTokenValue());
@@ -512,11 +521,27 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 	}
 
 	function parseProperty(): boolean {
-		if (_scanner.getToken() !== SyntaxKind.StringLiteral) {
-			handleError(ParseErrorCode.PropertyNameExpected, [], [SyntaxKind.CloseBraceToken, SyntaxKind.CommaToken]);
+		const token = _scanner.getToken();
+		if (token === SyntaxKind.StringLiteral) {
+			parseString(false);
+		} else if (
+			token === SyntaxKind.Identifier ||
+			token === SyntaxKind.TrueKeyword ||
+			token === SyntaxKind.FalseKeyword ||
+			token === SyntaxKind.NullKeyword ||
+			token === SyntaxKind.InfinityKeyword ||
+			token === SyntaxKind.NaNKeyword
+		) {
+			parseIdentifier();
+		} else {
+			handleError(
+				ParseErrorCode.PropertyNameExpected,
+				[],
+				[SyntaxKind.CloseBraceToken, SyntaxKind.CommaToken]
+			);
 			return false;
 		}
-		parseString(false);
+
 		if (_scanner.getToken() === SyntaxKind.ColonToken) {
 			onSeparator(':');
 			scanNext(); // consume colon

@@ -232,10 +232,7 @@ suite('JSON', () => {
 			SyntaxKind.NullKeyword);
 
 		// invalid words
-		assertKinds('nulllll', SyntaxKind.Unknown);
-		assertKinds('True', SyntaxKind.Unknown);
 		assertKinds('foo-bar', SyntaxKind.Unknown);
-		assertKinds('foo bar', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Unknown);
 
 		assertKinds('false//hello', SyntaxKind.FalseKeyword, SyntaxKind.LineCommentTrivia);
 	});
@@ -279,6 +276,7 @@ suite('JSON', () => {
 		assertValidParse('{ "hello": { "again": { "inside": 5 }, "world": 1 }}', { hello: { again: { inside: 5 }, world: 1 } });
 		assertValidParse('{ "foo": /*hello*/true }', { foo: true });
 		assertValidParse('{ "": true }', { '': true });
+		assertValidParse('{ ":":":" }', { ':': ':' });
 	});
 
 	test('parse: arrays', () => {
@@ -636,7 +634,7 @@ suite('JSON5', () => {
 		assertScanError('/* this is a \ncomment', ScanError.UnexpectedEndOfComment, SyntaxKind.BlockCommentTrivia);
 
 		// broken comment
-		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Unknown);
+		assertKinds('/ ', SyntaxKind.Unknown, SyntaxKind.Trivia);
 	});
 
 	test('strings', () => {
@@ -711,10 +709,10 @@ suite('JSON5', () => {
 		assertKinds('+1.', SyntaxKind.NumericLiteral);
 
 		// Infinity and NaN
-		assertKinds('Infinity', SyntaxKind.NumericLiteral);
+		assertKinds('Infinity', SyntaxKind.InfinityKeyword);
 		assertKinds('-Infinity', SyntaxKind.NumericLiteral);
 		assertKinds('+Infinity', SyntaxKind.NumericLiteral);
-		assertKinds('NaN', SyntaxKind.NumericLiteral);
+		assertKinds('NaN', SyntaxKind.NaNKeyword);
 		assertKinds('-NaN', SyntaxKind.NumericLiteral);
 		assertKinds('+NaN', SyntaxKind.NumericLiteral);
 
@@ -729,13 +727,28 @@ suite('JSON5', () => {
 		assertKinds('++1', SyntaxKind.Unknown, SyntaxKind.NumericLiteral);
 
 		// invalid hex
-		assertKinds('.0x1', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
-		assertKinds('-0x', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
-		assertKinds('-0xG', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+		assertKinds('.0x1', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
+		assertKinds('-0x', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
+		assertKinds('-0xG', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
 		assertKinds('0xfff.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
 
 		// extra decimal
 		assertKinds('.1.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
+	});
+
+	test('identifiers', () => {
+		assertKinds('a', SyntaxKind.Identifier);
+		assertKinds('ab', SyntaxKind.Identifier);
+		assertKinds('nulllll', SyntaxKind.Identifier);
+		assertKinds('True', SyntaxKind.Identifier);
+		assertKinds('truefalse', SyntaxKind.Identifier);
+		assertKinds('$100', SyntaxKind.Identifier);
+		assertKinds('$100', SyntaxKind.Identifier);
+		assertKinds('\\u1234', SyntaxKind.Identifier);
+		assertKinds('ஐᚙዎဪᔽᆶഐᚠ', SyntaxKind.Identifier);
+
+		assertKinds('foo bar', SyntaxKind.Identifier, SyntaxKind.Trivia, SyntaxKind.Identifier);
+		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Identifier);
 	});
 
 	test('parse: literals', () => {
@@ -758,5 +771,17 @@ suite('JSON5', () => {
 		assertValidParse("{'': ''}", { '': '' });
 		assertValidParse("{'\"': '\"'}", { '"': '"' });
 		assertValidParse("{\"''\": \"''\"}", { "''": "''" });
+
+		// unquoted property names
+		assertValidParse('{a: true}', { a: true });
+		assertValidParse("{a: \"a\", 'b': 'b', \"c\": 'c'}", { a: 'a', b: 'b', c: 'c' });
+		assertValidParse('{true: true}', { true: true });
+		assertValidParse('{NaN: Infinity, Infinity: "NaN"}', { NaN: Infinity, Infinity: 'NaN' });
+		assertValidParse('{nulllll: true}', { nulllll: true });
+		assertValidParse('{ ₐ: "A"}', { ₐ: 'A' });
+
+		// numbers are still not allowed unquoted
+		assertInvalidParse('{ 1: "one" }', {});
+		assertInvalidParse('{ +Infinity: "wut" }', {});
 	});
 })

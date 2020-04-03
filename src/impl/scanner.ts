@@ -52,7 +52,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			[SyntaxKind.LineBreakTrivia]: {},
 			[SyntaxKind.Trivia]: {},
 			[SyntaxKind.Unknown]: {},
-			[SyntaxKind.EOF]: {}
+			[SyntaxKind.EOF]: {},
+			[SyntaxKind.Identifier]: {},
+			[SyntaxKind.InfinityKeyword]: {},
+			[SyntaxKind.NaNKeyword]: {}
 		};
 		const consumed = isFailure(scanResult) ? scanResult.consumed : scanResult.lexeme;
 		const pos = previousState.pos + consumed.length;
@@ -212,7 +215,12 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			return {
 				kind: 'success',
 				lexeme: firstResult.lexeme + secondResult.lexeme,
-				syntaxKind: SyntaxKind.Unknown
+				syntaxKind:
+					secondResult.lexeme === ''
+						? firstResult.syntaxKind
+						: firstResult.lexeme === ''
+						? secondResult.syntaxKind
+						: SyntaxKind.Unknown
 			};
 		}
 	}
@@ -469,7 +477,11 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	Infinity
 	// 	NaN
 	function scanJSON5NumericLiteral(input: string): ScanResult {
-		return or(scanNumericLiteral, literal('Infinity'), literal('NaN'))(input);
+		return or(
+			withSyntaxKind(SyntaxKind.NumericLiteral, scanNumericLiteral),
+			withSyntaxKind(SyntaxKind.InfinityKeyword, literal('Infinity')),
+			withSyntaxKind(SyntaxKind.NaNKeyword, literal('NaN'))
+		)(input);
 	}
 
 	// JSON5Number::
@@ -477,13 +489,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	+ JSON5NumericLiteral
 	// 	- JSON5NumericLiteral
 	function scanJSON5Number(input: string): ScanResult {
-		return withSyntaxKind(
-			SyntaxKind.NumericLiteral,
-			or(
-				scanJSON5NumericLiteral,
-				and(literal('+'), scanJSON5NumericLiteral),
-				and(literal('-'), scanJSON5NumericLiteral)
-			)
+		return or(
+			scanJSON5NumericLiteral,
+			withSyntaxKind(SyntaxKind.NumericLiteral, and(literal('+'), scanJSON5NumericLiteral)),
+			withSyntaxKind(SyntaxKind.NumericLiteral, and(literal('-'), scanJSON5NumericLiteral))
 		)(input);
 	}
 
@@ -782,13 +791,17 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	IdentifierStart
 	// 	IdentifierName IdentifierPart
 	function scanIdentifierName(input: string): ScanResult {
-		return or(scanIdentifierStart, and(scanIdentifierName, scanIdentifierPart))(input);
+		// Note: this doesn't exactly follow the grammar to avoid recursion.
+		return or(
+			scanIdentifierStart,
+			and(scanIdentifierStart, oneOrMore(scanIdentifierPart))
+		)(input);
 	}
 
 	// JSON5Identifier ::
 	//	IdentifierName
 	function scanJSON5Identifier(input: string): ScanResult {
-		return scanIdentifierName(input);
+		return withSyntaxKind(SyntaxKind.Identifier, scanIdentifierName)(input);
 	}
 
 	// JSON5Token ::
@@ -1015,17 +1028,21 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				}
 				if (tokenOffset !== pos) {
 					value = text.substring(tokenOffset, pos);
-					if (isSuccess(complete(literal('true'))(value))) {
-						return (token = SyntaxKind.TrueKeyword);
-					} else if (isSuccess(complete(literal('false'))(value))) {
-						return (token = SyntaxKind.FalseKeyword);
-					} else if (isSuccess(complete(literal('null'))(value))) {
-						return (token = SyntaxKind.NullKeyword);
-					} else if (isSuccess(complete(scanJSON5Number)(value))) {
-						return (token = SyntaxKind.NumericLiteral);
-					} else {
-						return (token = SyntaxKind.Unknown);
+
+					scanResult = or(
+						complete(scanJSON5Identifier),
+						complete(scanBooleanLiteral),
+						complete(scanNullLiteral),
+						complete(scanJSON5Number)
+					)(value);
+
+					if (isSuccess(scanResult)) {
+						nextState = computeNextScanState(currentState, scanResult);
+						updateState(nextState);
+						return token;
 					}
+
+					return (token = SyntaxKind.Unknown);
 				}
 				// some
 				value += String.fromCharCode(code);
