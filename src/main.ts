@@ -265,7 +265,6 @@ export interface Location {
 
 export interface ParseOptions {
 	disallowComments?: boolean;
-	allowTrailingComma?: boolean;
 	allowEmptyContent?: boolean;
 }
 

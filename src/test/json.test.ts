@@ -288,7 +288,6 @@ suite('JSON', () => {
 
 	test('parse: objects with errors', () => {
 		assertInvalidParse('{,}', {});
-		assertInvalidParse('{ "foo": true, }', { foo: true });
 		assertInvalidParse('{ "bar": 8 "xoo": "foo" }', { bar: 8, xoo: 'foo' });
 		assertInvalidParse('{ ,"bar": 8 }', { bar: 8 });
 		assertInvalidParse('{ ,"bar": 8, "foo" }', { bar: 8 });
@@ -317,19 +316,6 @@ suite('JSON', () => {
 		assertInvalidParse('{ "foo": /*comment*/ true }', { foo: true }, options);
 	});
 
-	test('parse: trailing comma', () => {
-		let options = { allowTrailingComma: true };
-		assertValidParse('{ "hello": [], }', { hello: [] }, options);
-		assertValidParse('{ "hello": [] }', { hello: [] }, options);
-		assertValidParse('{ "hello": [], "world": {}, }', { hello: [], world: {} }, options);
-		assertValidParse('{ "hello": [], "world": {} }', { hello: [], world: {} }, options);
-		assertValidParse('[ 1, 2, ]', [1, 2], options);
-		assertValidParse('[ 1, 2 ]', [1, 2], options);
-
-		assertInvalidParse('{ "hello": [], }', { hello: [] });
-		assertInvalidParse('{ "hello": [], "world": {}, }', { hello: [], world: {} });
-		assertInvalidParse('[ 1, 2, ]', [1, 2]);
-	});
 	test('location: properties', () => {
 		assertLocation('|{ "foo": "bar" }', [], void 0, false);
 		assertLocation('{| "foo": "bar" }', [''], void 0, true);
@@ -422,29 +408,6 @@ suite('JSON', () => {
 				]
 			}
 		);
-		assertTree('{  "id": { "foo": { } } , }',
-			{
-				type: 'object', offset: 0, length: 27, children: [
-					{
-						type: 'property', offset: 3, length: 20, colonOffset: 7, children: [
-							{ type: 'string', offset: 3, length: 4, value: 'id' },
-							{
-								type: 'object', offset: 9, length: 14, children: [
-									{
-										type: 'property', offset: 11, length: 10, colonOffset: 16, children: [
-											{ type: 'string', offset: 11, length: 5, value: 'foo' },
-											{ type: 'object', offset: 18, length: 3, children: [] }
-										]
-									}
-								]
-							}
-						]
-					}
-				]
-			}, [
-			{ error: ParseErrorCode.PropertyNameExpected, offset: 26, length: 1 },
-			{ error: ParseErrorCode.ValueExpected, offset: 26, length: 1 }
-		]);
 	});
 
 	test('visit: object', () => {
@@ -804,5 +767,111 @@ suite('JSON5', () => {
 		// numbers are still not allowed unquoted
 		assertInvalidParse('{ 1: "one" }', {});
 		assertInvalidParse('{ +Infinity: "wut" }', {});
+
+		// trailing commas
+		assertValidParse('{ "hello": [], }', { hello: [] });
+		assertValidParse('{ "hello": [] }', { hello: [] });
+		assertValidParse('{ "hello": [], "world": {}, }', { hello: [], world: {} });
+		assertValidParse('{ "hello": [], "world": {} }', { hello: [], world: {} });
+		assertValidParse('{ "foo": true, }', { foo: true });
+		assertValidParse('{"a": "b",}', { a: 'b' });
+		assertValidParse('{c: 1,}', { c: 1 });
+		assertValidParse('{_: [{},],}', { _: [{}] });
+		assertValidParse('{ comma: ",", }', { comma: ',' });
+		assertValidParse('{x:{x:{x:{},},},}', { x: { x: { x: {} } } });
+		assertValidParse('{",":",",}', { ',': ',' });
+
+		assertInvalidParse('{ a: true,, }', { a: true });
+		assertInvalidParse('{ a: true,, b: false }', { a: true, b: false });
+		assertInvalidParse('{ , a: true, b: false }', { a: true, b: false });
+		assertInvalidParse('{,}', {});
+	});
+
+	test('parse: arrays', () => {
+		assertValidParse('[ 1, 2, ]', [1, 2]);
+		assertValidParse('[ [],  [ [], ],]', [[], [[]]]);
+		assertValidParse('[ { "a": null, }, ]', [{ a: null }]);
+
+		assertInvalidParse('[1,,]', [1]);
+		assertInvalidParse('[1,,2]', [1, 2]);
+		assertInvalidParse('[,1,2]', [1, 2]);
+		assertInvalidParse('[,]', []);
+	});
+
+	test('tree: objects', () => {
+		assertTree('{  "id": { "foo": { } } , }', {
+			type: 'object',
+			offset: 0,
+			length: 27,
+			children: [
+				{
+					type: 'property',
+					offset: 3,
+					length: 20,
+					colonOffset: 7,
+					children: [
+						{ type: 'string', offset: 3, length: 4, value: 'id' },
+						{
+							type: 'object',
+							offset: 9,
+							length: 14,
+							children: [
+								{
+									type: 'property',
+									offset: 11,
+									length: 10,
+									colonOffset: 16,
+									children: [
+										{ type: 'string', offset: 11, length: 5, value: 'foo' },
+										{ type: 'object', offset: 18, length: 3, children: [] }
+									]
+								}
+							]
+						}
+					]
+				}
+			]
+		});
+
+		assertTree(
+			'{  "id": { "foo": { } } ,, }',
+			{
+				type: 'object',
+				offset: 0,
+				length: 28,
+				children: [
+					{
+						type: 'property',
+						offset: 3,
+						length: 20,
+						colonOffset: 7,
+						children: [
+							{ type: 'string', offset: 3, length: 4, value: 'id' },
+							{
+								type: 'object',
+								offset: 9,
+								length: 14,
+								children: [
+									{
+										type: 'property',
+										offset: 11,
+										length: 10,
+										colonOffset: 16,
+										children: [
+											{ type: 'string', offset: 11, length: 5, value: 'foo' },
+											{ type: 'object', offset: 18, length: 3, children: [] }
+										]
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			[
+				{ error: ParseErrorCode.PropertyNameExpected, offset: 25, length: 1 },
+				{ error: ParseErrorCode.ValueExpected, offset: 25, length: 1 }
+			]
+		);
 	});
 })
