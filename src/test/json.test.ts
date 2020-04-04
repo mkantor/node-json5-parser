@@ -751,6 +751,27 @@ suite('JSON5', () => {
 		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Identifier);
 	});
 
+	test('trivia', () => {
+		assertKinds('\u000B', SyntaxKind.Trivia);
+		assertKinds('\u000C', SyntaxKind.Trivia);
+		assertKinds('\u00A0', SyntaxKind.Trivia);
+		assertKinds('\uFEFF', SyntaxKind.Trivia);
+		assertKinds('\u2006', SyntaxKind.Trivia);
+		assertKinds(' \t\u000B\u000C\u00A0\uFEFF\u2006', SyntaxKind.Trivia);
+
+		assertKinds('\u2028', SyntaxKind.LineBreakTrivia);
+		assertKinds('\u2029', SyntaxKind.LineBreakTrivia);
+		assertKinds(
+			'\t\u000B\u000C\u00A0\uFEFF\u2006 \n\r\u2028\u2029 \t\u000B\u000C\u00A0\uFEFF\u2006',
+			SyntaxKind.Trivia,
+			SyntaxKind.LineBreakTrivia,
+			SyntaxKind.LineBreakTrivia,
+			SyntaxKind.LineBreakTrivia,
+			SyntaxKind.LineBreakTrivia,
+			SyntaxKind.Trivia
+		);
+	});
+
 	test('parse: literals', () => {
 		assertValidParse("'foo'", 'foo');
 		assertValidParse('"a\\\nb"', 'ab');
