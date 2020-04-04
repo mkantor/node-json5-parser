@@ -143,7 +143,10 @@ function assertVisit(input: string, expected: VisitorCallback[], expectedErrors:
 
 function assertNodeAtLocation(input: Node, segments: Segment[], expected: any) {
 	let actual = findNodeAtLocation(input, segments);
-	assert.deepEqual(actual ? getNodeValue(actual) : void 0, expected);
+	const actualValue = actual ? getNodeValue(actual) : void 0;
+	if (!(Number.isNaN(actualValue) && Number.isNaN(expected))) {
+		assert.deepEqual(actualValue, expected);
+	}
 	if (actual) {
 		assert.deepEqual(getNodePath(actual), segments);
 	}
@@ -617,7 +620,7 @@ suite('JSON5', () => {
 
 		// hexadecimal numbers
 		assertKinds('0xa', SyntaxKind.NumericLiteral);
-		assertKinds('0xdecaf', SyntaxKind.NumericLiteral);
+		assertKinds('0Xdecaf', SyntaxKind.NumericLiteral);
 		assertKinds('-0xC0FFEE', SyntaxKind.NumericLiteral);
 		assertKinds('0x0', SyntaxKind.NumericLiteral);
 
@@ -654,7 +657,7 @@ suite('JSON5', () => {
 		// invalid hex
 		assertKinds('.0x1', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
 		assertKinds('-0x', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
-		assertKinds('-0xG', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
+		assertKinds('-0XG', SyntaxKind.NumericLiteral, SyntaxKind.Identifier);
 		assertKinds('0xfff.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
 
 		// extra decimal
@@ -763,6 +766,88 @@ suite('JSON5', () => {
 		assertInvalidParse('[,]', []);
 	});
 
+	test('location: properties', () => {
+		assertLocation("|{ foo: 'bar', }", [], void 0, false);
+		assertLocation("{| foo: 'bar', }", [''], void 0, true);
+		assertLocation("{ |foo: 'bar', }", ['foo'], 'property', true);
+		assertLocation("{ foo|: 'bar', }", ['foo'], 'property', true);
+		assertLocation("{ foo|: 'bar', }", ['foo'], 'property', true);
+		assertLocation("{ foo: 'bar'|, }", ['foo'], 'string', false);
+		assertLocation("{ foo: 'bar',| }", [''], void 0, true);
+		assertLocation("{ foo:| 'bar', }", ['foo'], void 0, false);
+		assertLocation('{ foo: {\'bar|\': NaN, "car": +0x1 /* blah */ } }', ['foo', 'bar'], 'property', true);
+		assertLocation('{ foo: {\'bar\': N|aN, "car": -0x2 /* blah */ } }', ['foo', 'bar'], 'number', false);
+		assertLocation('{ foo: {\'bar\': NaN|, "car": +0x3 /* blah */ } }', ['foo', 'bar'], 'number', false);
+		assertLocation('{ foo: {\'bar\': NaN,| "car": -0x4 /* blah */ } }', ['foo', ''], void 0, true);
+		assertLocation('{ foo: {\'bar\': NaN, "ca|r": +0x5 /* blah */ } }', ['foo', 'car'], 'property', true);
+		assertLocation('{ foo: {\'bar\': NaN, "car": -|0x6 /* blah */ } }', ['foo', 'car'], 'number', false);
+		assertLocation('{ foo: {\'bar\': NaN, "car": +0x7| /* blah */ } }', ['foo', 'car'], 'number', false);
+		assertLocation('{ foo: {\'bar\': NaN, "car": -0x8 /* blah| */ } }', ['foo', 'car'], 'number', false);
+		assertLocation('{ foo: {\'bar\': NaN, "car": +0x9 /* blah */ }| }', ['foo'], void 0, false);
+		assertLocation('{ foo: {\'bar\': NaN, "car": -0xa /* blah */ },| "\\u1234": {} }', [''], void 0, true);
+		assertLocation('{ foo: {\'bar\': NaN, "car": +0xB /* blah */ }, "\\u12|34": {} }', ['\u1234'], 'property', true);
+	});
+
+	test('location: arrays', () => {
+		assertLocation("|['foo', 0x0 ]", [], void 0, false);
+		assertLocation("[|'foo', 0x0 ]", [0], 'string', false);
+		assertLocation("['foo'|, 0x0 ]", [0], 'string', false);
+		assertLocation("['foo',| 0x0 ]", [1], void 0, false);
+		assertLocation("['foo', |0x0 ]", [1], 'number', false);
+		assertLocation("['foo', 0x0,| ]", [2], void 0, false);
+		assertLocation("['foo', 0x0,,| ]", [3], void 0, false);
+		assertLocation("[['foo', 0x0,, ],|", [1], void 0, false);
+	});
+
+	test('location: matches', () => {
+		assertMatchesLocation('{ dependencies: { | } }', ['dependencies']);
+		assertMatchesLocation('{ dependencies: { fo| } }', ['dependencies']);
+		assertMatchesLocation('{ dependencies: { fo| } }', ['dependencies']);
+		assertMatchesLocation('{ dependencies: { fo|: 1 } }', ['dependencies']);
+		assertMatchesLocation('{ dependencies: { fo|: 1 } }', ['dependencies']);
+		assertMatchesLocation('{ dependencies: { fo: | } }', ['dependencies', '*']);
+	});
+
+	test('tree: literals', () => {
+		assertTree('Infinity', { type: 'number', offset: 0, length: 8, value: Infinity });
+		assertTree('+Infinity', { type: 'number', offset: 0, length: 9, value: Infinity });
+		assertTree('-Infinity', { type: 'number', offset: 0, length: 9, value: -Infinity });
+		assertTree('0X3', { type: 'number', offset: 0, length: 3, value: 3 });
+		assertTree('-0x0123456789abcdefABCDEF', {
+			type: 'number',
+			offset: 0,
+			length: 25,
+			value: -0x0123456789abcdefabcdef
+		});
+		assertTree('+1.93e-19', { type: 'number', offset: 0, length: 9, value: +1.93e-19 });
+		assertTree("'hello'", { type: 'string', offset: 0, length: 7, value: 'hello' });
+	});
+
+	test('tree: arrays', () => {
+		assertTree('[ 1, ]', {
+			type: 'array',
+			offset: 0,
+			length: 6,
+			children: [{ type: 'number', offset: 2, length: 1, value: 1 }]
+		});
+		assertTree('[[[],[],],]', {
+			type: 'array',
+			offset: 0,
+			length: 11,
+			children: [
+				{
+					type: 'array',
+					offset: 1,
+					length: 8,
+					children: [
+						{ type: 'array', offset: 2, length: 2, children: [] },
+						{ type: 'array', offset: 5, length: 2, children: [] }
+					]
+				}
+			]
+		});
+	});
+
 	test('tree: objects', () => {
 		assertTree('{  "id": { "foo": { } } , }', {
 			type: 'object',
@@ -838,6 +923,55 @@ suite('JSON5', () => {
 				{ error: ParseErrorCode.ValueExpected, offset: 25, length: 1 }
 			]
 		);
+
+		assertTree('{$:{},}', {
+			type: 'object',
+			offset: 0,
+			length: 7,
+			children: [
+				{
+					type: 'property',
+					offset: 1,
+					length: 4,
+					colonOffset: 2,
+					children: [
+						{ type: 'string', offset: 1, length: 1, value: '$' },
+						{ type: 'object', offset: 3, length: 2, children: [] }
+					]
+				}
+			]
+		});
+		assertTree('{ val: 1 }', {
+			type: 'object',
+			offset: 0,
+			length: 10,
+			children: [
+				{
+					type: 'property',
+					offset: 2,
+					length: 6,
+					colonOffset: 5,
+					children: [
+						{ type: 'string', offset: 2, length: 3, value: 'val' },
+						{ type: 'number', offset: 7, length: 1, value: 1 }
+					]
+				}
+			]
+		});
+	});
+
+	test('tree: find location', () => {
+		let root = parseTree('{ key1: { key11: [ \'val111\', "val112", ], }, \'key2\': [ { null: Infinity, "key22": 221, }, NaN, [{}] ] }');
+		assertNodeAtLocation(root, ['key1'], { key11: ['val111', 'val112'] });
+		assertNodeAtLocation(root, ['key1', 'key11'], ['val111', 'val112']);
+		assertNodeAtLocation(root, ['key1', 'key11', 0], 'val111');
+		assertNodeAtLocation(root, ['key1', 'key11', 1], 'val112');
+		assertNodeAtLocation(root, ['key1', 'key11', 2], void 0);
+		assertNodeAtLocation(root, ['key2', 0, 'null'], Infinity);
+		assertNodeAtLocation(root, ['key2', 0, 'key22'], 221);
+		assertNodeAtLocation(root, ['key2', 1], NaN);
+		assertNodeAtLocation(root, ['key2', 2], [{}]);
+		assertNodeAtLocation(root, ['key2', 2, 0], {});
 	});
 
 	test('visit: comment', () => {
@@ -872,5 +1006,53 @@ suite('JSON5', () => {
 				{ error: ParseErrorCode.InvalidCommentToken, offset: 18, length: 3, startLine: 1, startCharacter: 13 },
 			],
 			true);
+	});
+
+	test('visit: object', () => {
+		assertVisit("{ foo: 'bar' }", [
+			{ id: 'onObjectBegin', text: '{', startLine: 0, startCharacter: 0 },
+			{ id: 'onObjectProperty', text: 'foo', startLine: 0, startCharacter: 2, arg: 'foo' },
+			{ id: 'onSeparator', text: ':', startLine: 0, startCharacter: 5, arg: ':' },
+			{ id: 'onLiteralValue', text: "'bar'", startLine: 0, startCharacter: 7, arg: 'bar' },
+			{ id: 'onObjectEnd', text: '}', startLine: 0, startCharacter: 13 }
+		]);
+
+		assertVisit("{ foo: { 'goo': Infinity, }, }", [
+			{ id: 'onObjectBegin', text: '{', startLine: 0, startCharacter: 0 },
+			{ id: 'onObjectProperty', text: 'foo', startLine: 0, startCharacter: 2, arg: 'foo' },
+			{ id: 'onSeparator', text: ':', startLine: 0, startCharacter: 5, arg: ':' },
+			{ id: 'onObjectBegin', text: '{', startLine: 0, startCharacter: 7 },
+			{ id: 'onObjectProperty', text: "'goo'", startLine: 0, startCharacter: 9, arg: 'goo' },
+			{ id: 'onSeparator', text: ':', startLine: 0, startCharacter: 14, arg: ':' },
+			{ id: 'onLiteralValue', text: 'Infinity', startLine: 0, startCharacter: 16, arg: Infinity },
+			{ id: 'onSeparator', text: ',', startLine: 0, startCharacter: 24, arg: ',' },
+			{ id: 'onObjectEnd', text: '}', startLine: 0, startCharacter: 26 },
+			{ id: 'onSeparator', text: ',', startLine: 0, startCharacter: 27, arg: ',' },
+			{ id: 'onObjectEnd', text: '}', startLine: 0, startCharacter: 29 }
+		]);
+	});
+
+	test('visit: array', () => {
+		assertVisit("[ 'hi', +1, [], ]", [
+			{ id: 'onArrayBegin', text: '[', startLine: 0, startCharacter: 0 },
+			{ id: 'onLiteralValue', text: "'hi'", startLine: 0, startCharacter: 2, arg: 'hi' },
+			{ id: 'onSeparator', text: ',', startLine: 0, startCharacter: 6, arg: ',' },
+			{ id: 'onLiteralValue', text: '+1', startLine: 0, startCharacter: 8, arg: 1 },
+			{ id: 'onSeparator', text: ',', startLine: 0, startCharacter: 10, arg: ',' },
+			{ id: 'onArrayBegin', text: '[', startLine: 0, startCharacter: 12 },
+			{ id: 'onArrayEnd', text: ']', startLine: 0, startCharacter: 13 },
+			{ id: 'onSeparator', text: ',', startLine: 0, startCharacter: 14, arg: ',' },
+			{ id: 'onArrayEnd', text: ']', startLine: 0, startCharacter: 16 }
+		]);
+
+		assertVisit('[\r0,\n1,\u{2028}2\u{2029}]', [
+			{ id: 'onArrayBegin', text: '[', startLine: 0, startCharacter: 0 },
+			{ id: 'onLiteralValue', text: '0', startLine: 1, startCharacter: 0, arg: 0 },
+			{ id: 'onSeparator', text: ',', startLine: 1, startCharacter: 1, arg: ',' },
+			{ id: 'onLiteralValue', text: '1', startLine: 2, startCharacter: 0, arg: 1 },
+			{ id: 'onSeparator', text: ',', startLine: 2, startCharacter: 1, arg: ',' },
+			{ id: 'onLiteralValue', text: '2', startLine: 3, startCharacter: 0, arg: 2 },
+			{ id: 'onArrayEnd', text: ']', startLine: 4, startCharacter: 0 }
+		]);
 	});
 })
