@@ -102,8 +102,6 @@ function combineAnd(
 					? firstResult.syntaxKind
 					: firstResult.lexeme === ''
 					? secondResult.syntaxKind
-					: firstResult.syntaxKind === secondResult.syntaxKind
-					? firstResult.syntaxKind
 					: SyntaxKind.Unknown
 		};
 	}
