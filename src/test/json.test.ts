@@ -262,7 +262,6 @@ suite('JSON', () => {
 		assertValidParse('23e3', 23e3);
 		assertValidParse('1.2E+3', 1.2E+3);
 		assertValidParse('1.2E-3', 1.2E-3);
-		assertValidParse('1.2E-3 // comment', 1.2E-3);
 	});
 
 	test('parse: objects', () => {
@@ -274,7 +273,6 @@ suite('JSON', () => {
 		assertValidParse('{ "lineComment": "//", "blockComment": ["/*", "*/"], "brackets": [ ["{", "}"], ["[", "]"], ["(", ")"] ] }', { lineComment: '//', blockComment: ['/*', '*/'], brackets: [['{', '}'], ['[', ']'], ['(', ')']] });
 		assertValidParse('{ "hello": [], "world": {} }', { hello: [], world: {} });
 		assertValidParse('{ "hello": { "again": { "inside": 5 }, "world": 1 }}', { hello: { again: { inside: 5 }, world: 1 } });
-		assertValidParse('{ "foo": /*hello*/true }', { foo: true });
 		assertValidParse('{ "": true }', { '': true });
 		assertValidParse('{ ":":":" }', { ':': ':' });
 	});
@@ -452,40 +450,6 @@ suite('JSON', () => {
 			{ id: 'onSeparator', text: ',', startLine: 2, startCharacter: 1, arg: ',' },
 			{ id: 'onLiteralValue', text: '2', startLine: 3, startCharacter: 0, arg: 2 },
 			{ id: 'onArrayEnd', text: ']', startLine: 4, startCharacter: 0 }]);
-	});
-
-	test('visit: comment', () => {
-		assertVisit('/* g */ { "foo": //f\n"bar" }', [
-			{ id: 'onComment', text: '/* g */', startLine: 0, startCharacter: 0 },
-			{ id: 'onObjectBegin', text: '{', startLine: 0, startCharacter: 8 },
-			{ id: 'onObjectProperty', text: '"foo"', startLine: 0, startCharacter: 10, arg: 'foo' },
-			{ id: 'onSeparator', text: ':', startLine: 0, startCharacter: 15, arg: ':' },
-			{ id: 'onComment', text: '//f', startLine: 0, startCharacter: 17 },
-			{ id: 'onLiteralValue', text: '"bar"', startLine: 1, startCharacter: 0, arg: 'bar' },
-			{ id: 'onObjectEnd', text: '}', startLine: 1, startCharacter: 6 },
-		]);
-		assertVisit('/* g\r\n */ { "foo": //f\n"bar" }', [
-			{ id: 'onComment', text: '/* g\r\n */', startLine: 0, startCharacter: 0 },
-			{ id: 'onObjectBegin', text: '{', startLine: 1, startCharacter: 4 },
-			{ id: 'onObjectProperty', text: '"foo"', startLine: 1, startCharacter: 6, arg: 'foo' },
-			{ id: 'onSeparator', text: ':', startLine: 1, startCharacter: 11, arg: ':' },
-			{ id: 'onComment', text: '//f', startLine: 1, startCharacter: 13 },
-			{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
-			{ id: 'onObjectEnd', text: '}', startLine: 2, startCharacter: 6 },
-		]);
-		assertVisit('/* g\n */ { "foo": //f\n"bar"\n}',
-			[
-				{ id: 'onObjectBegin', text: '{', startLine: 1, startCharacter: 4 },
-				{ id: 'onObjectProperty', text: '"foo"', startLine: 1, startCharacter: 6, arg: 'foo' },
-				{ id: 'onSeparator', text: ':', startLine: 1, startCharacter: 11, arg: ':' },
-				{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
-				{ id: 'onObjectEnd', text: '}', startLine: 3, startCharacter: 0 },
-			],
-			[
-				{ error: ParseErrorCode.InvalidCommentToken, offset: 0, length: 8, startLine: 0, startCharacter: 0 },
-				{ error: ParseErrorCode.InvalidCommentToken, offset: 18, length: 3, startLine: 1, startCharacter: 13 },
-			],
-			true);
 	});
 
 	test('visit: incomplete', () => {
@@ -748,13 +712,15 @@ suite('JSON5', () => {
 		assertValidParse('-NaN', -NaN);
 		assertValidParse('+NaN', +NaN);
 		assertValidParse('.1E-999 /* comment */', .1E-999);
+		assertValidParse('1.2E-3 // comment', 1.2E-3);
 	});
 
 	test('parse: objects', () => {
 		assertValidParse("{'b': {}}", { b: {} });
 		assertValidParse("{'': ''}", { '': '' });
 		assertValidParse("{'\"': '\"'}", { '"': '"' });
-		assertValidParse("{\"''\": \"''\"}", { "''": "''" });
+		assertValidParse('{"\'\'": "\'\'"}', { "''": "''" });
+		assertValidParse('{ "foo": /*hello*/true }', { foo: true });
 
 		// unquoted property names
 		assertValidParse('{a: true}', { a: true });
@@ -873,5 +839,39 @@ suite('JSON5', () => {
 				{ error: ParseErrorCode.ValueExpected, offset: 25, length: 1 }
 			]
 		);
+	});
+
+	test('visit: comment', () => {
+		assertVisit('/* g */ { "foo": //f\n"bar" }', [
+			{ id: 'onComment', text: '/* g */', startLine: 0, startCharacter: 0 },
+			{ id: 'onObjectBegin', text: '{', startLine: 0, startCharacter: 8 },
+			{ id: 'onObjectProperty', text: '"foo"', startLine: 0, startCharacter: 10, arg: 'foo' },
+			{ id: 'onSeparator', text: ':', startLine: 0, startCharacter: 15, arg: ':' },
+			{ id: 'onComment', text: '//f', startLine: 0, startCharacter: 17 },
+			{ id: 'onLiteralValue', text: '"bar"', startLine: 1, startCharacter: 0, arg: 'bar' },
+			{ id: 'onObjectEnd', text: '}', startLine: 1, startCharacter: 6 },
+		]);
+		assertVisit('/* g\r\n */ { "foo": //f\n"bar" }', [
+			{ id: 'onComment', text: '/* g\r\n */', startLine: 0, startCharacter: 0 },
+			{ id: 'onObjectBegin', text: '{', startLine: 1, startCharacter: 4 },
+			{ id: 'onObjectProperty', text: '"foo"', startLine: 1, startCharacter: 6, arg: 'foo' },
+			{ id: 'onSeparator', text: ':', startLine: 1, startCharacter: 11, arg: ':' },
+			{ id: 'onComment', text: '//f', startLine: 1, startCharacter: 13 },
+			{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
+			{ id: 'onObjectEnd', text: '}', startLine: 2, startCharacter: 6 },
+		]);
+		assertVisit('/* g\n */ { "foo": //f\n"bar"\n}',
+			[
+				{ id: 'onObjectBegin', text: '{', startLine: 1, startCharacter: 4 },
+				{ id: 'onObjectProperty', text: '"foo"', startLine: 1, startCharacter: 6, arg: 'foo' },
+				{ id: 'onSeparator', text: ':', startLine: 1, startCharacter: 11, arg: ':' },
+				{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
+				{ id: 'onObjectEnd', text: '}', startLine: 3, startCharacter: 0 },
+			],
+			[
+				{ error: ParseErrorCode.InvalidCommentToken, offset: 0, length: 8, startLine: 0, startCharacter: 0 },
+				{ error: ParseErrorCode.InvalidCommentToken, offset: 18, length: 3, startLine: 1, startCharacter: 13 },
+			],
+			true);
 	});
 })
