@@ -27,18 +27,23 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		pos: number;
 		lineNumber: number;
 		tokenLineStartOffset: number;
+		tokenOffset: number;
+		lineStartOffset: number;
+		prevTokenLineStartOffset: number;
 	}
 
 	const len = text.length;
-	let pos = 0,
-		value: string = '',
-		tokenOffset = 0,
-		token: SyntaxKind = SyntaxKind.Unknown,
-		lineNumber = 0,
-		lineStartOffset = 0,
-		tokenLineStartOffset = 0,
-		prevTokenLineStartOffset = 0,
-		scanError: ScanError = ScanError.None;
+	let state: ScanState = {
+		pos: 0,
+		value: '',
+		tokenOffset: 0,
+		token: SyntaxKind.Unknown,
+		lineNumber: 0,
+		lineStartOffset: 0,
+		tokenLineStartOffset: 0,
+		prevTokenLineStartOffset: 0,
+		scanError: ScanError.None
+	};
 
 	type ErrorAttributesMap = { [key in SyntaxKind]: Partial<ScanState> }
 	const errorAttributesMap: ErrorAttributesMap = {
@@ -107,51 +112,35 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			  };
 	}
 
-	function updateState(state: ScanState): void {
-		token = state.token;
-		value = state.value;
-		scanError = state.scanError;
-		pos = state.pos;
-		lineNumber = state.lineNumber;
-		tokenLineStartOffset = state.tokenLineStartOffset;
-	};
-
 	function setPosition(newPosition: number): void {
-		pos = newPosition;
-		value = '';
-		tokenOffset = 0;
-		token = SyntaxKind.Unknown;
-		scanError = ScanError.None;
+		state.pos = newPosition;
+		state.value = '';
+		state.tokenOffset = 0;
+		state.token = SyntaxKind.Unknown;
+		state.scanError = ScanError.None;
 	}
 
 	function scanNext(): SyntaxKind {
-		value = '';
-		scanError = ScanError.None;
-
-		tokenOffset = pos;
-		lineStartOffset = lineNumber;
-		prevTokenLineStartOffset = tokenLineStartOffset;
-
-		if (pos >= len) {
-			// at the end
-			tokenOffset = len;
-			return token = SyntaxKind.EOF;
-		}
-
-		const currentState: ScanState = {
-			token,
-			value,
-			scanError,
-			pos,
-			lineNumber,
-			tokenLineStartOffset
+		const baseState: ScanState = {
+			...state,
+			value: '',
+			scanError: ScanError.None,
+			tokenOffset: state.pos,
+			lineStartOffset: state.lineNumber,
+			prevTokenLineStartOffset: state.tokenLineStartOffset
 		};
-		const scanResult = json5InputElement(text.substring(pos));
-		const nextState = computeNextScanState(text, currentState, scanResult);
-
-		updateState(nextState);
-
-		return token;
+		if (state.pos >= len) {
+			// at the end
+			state = {
+				...baseState,
+				tokenOffset: len,
+				token: SyntaxKind.EOF
+			};
+		} else {
+			const scanResult = json5InputElement(text.substring(state.pos));
+			state = computeNextScanState(text, baseState, scanResult);
+		}
+		return state.token;
 	}
 
 	function scanNextNonTrivia(): SyntaxKind {
@@ -164,14 +153,14 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 
 	return {
 		setPosition: setPosition,
-		getPosition: () => pos,
+		getPosition: () => state.pos,
 		scan: ignoreTrivia ? scanNextNonTrivia : scanNext,
-		getToken: () => token,
-		getTokenValue: () => value,
-		getTokenOffset: () => tokenOffset,
-		getTokenLength: () => pos - tokenOffset,
-		getTokenStartLine: () => lineStartOffset,
-		getTokenStartCharacter: () => tokenOffset - prevTokenLineStartOffset,
-		getTokenError: () => scanError,
+		getToken: () => state.token,
+		getTokenValue: () => state.value,
+		getTokenOffset: () => state.tokenOffset,
+		getTokenLength: () => state.pos - state.tokenOffset,
+		getTokenStartLine: () => state.lineStartOffset,
+		getTokenStartCharacter: () => state.tokenOffset - state.prevTokenLineStartOffset,
+		getTokenError: () => state.scanError
 	};
 }
