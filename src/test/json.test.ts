@@ -191,7 +191,8 @@ suite('JSON', () => {
 
 		// unexpected end
 		assertScanError('"test', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
-		assertScanError('"test\n"', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);
+		assertScanError('"test\n"', ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.StringLiteral);
+
 	});
 
 	test('numbers', () => {
@@ -230,9 +231,6 @@ suite('JSON', () => {
 			SyntaxKind.FalseKeyword,
 			SyntaxKind.Trivia,
 			SyntaxKind.NullKeyword);
-
-		// invalid words
-		assertKinds('foo-bar', SyntaxKind.Unknown);
 
 		assertKinds('false//hello', SyntaxKind.FalseKeyword, SyntaxKind.LineCommentTrivia);
 	});
@@ -606,7 +604,7 @@ suite('JSON5', () => {
 
 		// unexpected end
 		assertScanError("'test", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral);
-		assertScanError("'test\n'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.LineBreakTrivia, SyntaxKind.StringLiteral);
+		assertScanError("'test\n'", ScanError.UnexpectedEndOfString, SyntaxKind.StringLiteral, SyntaxKind.StringLiteral);
 	})
 
 	test('numbers', () => {
@@ -674,6 +672,7 @@ suite('JSON5', () => {
 		assertKinds('\\u1234', SyntaxKind.Identifier);
 		assertKinds('ஐᚙዎဪᔽᆶഐᚠ', SyntaxKind.Identifier);
 
+		assertKinds('foo-bar', SyntaxKind.Identifier, SyntaxKind.Unknown, SyntaxKind.Identifier);
 		assertKinds('foo bar', SyntaxKind.Identifier, SyntaxKind.Trivia, SyntaxKind.Identifier);
 		assertKinds('/ ttt', SyntaxKind.Unknown, SyntaxKind.Trivia, SyntaxKind.Identifier);
 	});

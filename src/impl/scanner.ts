@@ -49,8 +49,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			[SyntaxKind.TrueKeyword]: { token: SyntaxKind.Unknown },
 			[SyntaxKind.FalseKeyword]: { token: SyntaxKind.Unknown },
 			[SyntaxKind.NullKeyword]: { token: SyntaxKind.Unknown },
-			[SyntaxKind.LineBreakTrivia]: {},
-			[SyntaxKind.Trivia]: {},
+			[SyntaxKind.LineBreakTrivia]: { token: SyntaxKind.Unknown },
+			[SyntaxKind.Trivia]: { token: SyntaxKind.Unknown },
 			[SyntaxKind.Unknown]: {},
 			[SyntaxKind.EOF]: {},
 			[SyntaxKind.Identifier]: {},
@@ -194,10 +194,6 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		return scanMatch;
 	}
 
-	function complete(scanner: Scanner): Scanner {
-		return and(scanner, scanEmpty);
-	}
-
 	function combineAnd(firstResult: ScanResult, secondResult: ScanResult): ScanResult {
 		if (isFailure(firstResult) && isFailure(secondResult)) {
 			return {
@@ -220,6 +216,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 						? firstResult.syntaxKind
 						: firstResult.lexeme === ''
 						? secondResult.syntaxKind
+						: firstResult.syntaxKind === secondResult.syntaxKind
+						? firstResult.syntaxKind
 						: SyntaxKind.Unknown
 			};
 		}
@@ -469,7 +467,17 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	DecimalLiteral
 	// 	HexIntegerLiteral
 	function scanNumericLiteral(input: string): ScanResult {
-		return or(scanDecimalLiteral, scanHexIntegerLiteral)(input);
+		return withSyntaxKind(SyntaxKind.NumericLiteral, or(scanDecimalLiteral, scanHexIntegerLiteral))(input);
+	}
+
+	// Infinity
+	function scanInfinityLiteral(input: string): ScanResult {
+		return withSyntaxKind(SyntaxKind.InfinityKeyword, literal('Infinity'))(input);
+	}
+
+	// NaN
+	function scanNaNLiteral(input: string): ScanResult {
+		return withSyntaxKind(SyntaxKind.NaNKeyword, literal('NaN'))(input);
 	}
 
 	// JSON5NumericLiteral::
@@ -477,11 +485,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	Infinity
 	// 	NaN
 	function scanJSON5NumericLiteral(input: string): ScanResult {
-		return or(
-			withSyntaxKind(SyntaxKind.NumericLiteral, scanNumericLiteral),
-			withSyntaxKind(SyntaxKind.InfinityKeyword, literal('Infinity')),
-			withSyntaxKind(SyntaxKind.NaNKeyword, literal('NaN'))
-		)(input);
+		return or(scanNumericLiteral, scanInfinityLiteral, scanNaNLiteral)(input);
 	}
 
 	// JSON5Number::
@@ -502,7 +506,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	<LS>
 	// 	<PS>
 	function scanLineTerminator(input: string): ScanResult {
-		return or(literal('\n'), literal('\r'), literal('\u2028'), literal('\u2029'))(input);
+		return withSyntaxKind(
+			SyntaxKind.LineBreakTrivia,
+			or(literal('\n'), literal('\r'), literal('\u2028'), literal('\u2029'))
+		)(input);
 	}
 
 	// LineTerminatorSequence ::
@@ -512,11 +519,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	<PS>
 	// 	<CR> <LF>
 	function scanLineTerminatorSequence(input: string): ScanResult {
-		return or(
-			literal('\n'),
-			lookaheadNot(literal('\r'), literal('\n')),
-			literal('\u2028'),
-			literal('\r\n')
+		return withSyntaxKind(
+			SyntaxKind.LineBreakTrivia,
+			or(
+				literal('\n'),
+				lookaheadNot(literal('\r'), literal('\n')),
+				literal('\u2028'),
+				literal('\u2029'),
+				literal('\r\n')
+			)
 		)(input);
 	}
 
@@ -690,14 +701,21 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		)(input);
 	}
 
+	// true
+	function scanTrueLiteral(input: string): ScanResult {
+		return withSyntaxKind(SyntaxKind.TrueKeyword, literal('true'))(input);
+	}
+
+	// false
+	function scanFalseLiteral(input: string): ScanResult {
+		return withSyntaxKind(SyntaxKind.FalseKeyword, literal('false'))(input);
+	}
+
 	// BooleanLiteral ::
 	// 	true
 	// 	false
 	function scanBooleanLiteral(input: string): ScanResult {
-		return or(
-			withSyntaxKind(SyntaxKind.TrueKeyword, literal('true')),
-			withSyntaxKind(SyntaxKind.FalseKeyword, literal('false'))
-		)(input);
+		return or(scanTrueLiteral, scanFalseLiteral)(input);
 	}
 
 	// JSON5Boolean ::
@@ -801,7 +819,16 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// JSON5Identifier ::
 	//	IdentifierName
 	function scanJSON5Identifier(input: string): ScanResult {
-		return withSyntaxKind(SyntaxKind.Identifier, scanIdentifierName)(input);
+		// Note: this doesn't exactly follow the grammar to get specific kinds for
+		// keywords.
+		return or(
+			withSyntaxKind(SyntaxKind.Identifier, scanIdentifierName),
+			scanNullLiteral,
+			scanTrueLiteral,
+			scanFalseLiteral,
+			scanInfinityLiteral,
+			scanNaNLiteral
+		)(input);
 	}
 
 	// JSON5Token ::
@@ -892,14 +919,21 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	<BOM>
 	// 	<USP>
 	function scanWhiteSpace(input: string): ScanResult {
-		return or(
-			literal('\t'),
-			literal('\u000B'),
-			literal('\u000C'),
-			literal('\u0020'),
-			literal('\u00A0'),
-			literal('\uFEFF'),
-			match(/^\p{Zs}/u)
+		// Note: this doesn't exactly follow the grammar because we want to treat
+		// contiguous whitespace as one token.
+		return withSyntaxKind(
+			SyntaxKind.Trivia,
+			oneOrMore(
+				or(
+					literal('\t'),
+					literal('\u000B'),
+					literal('\u000C'),
+					literal('\u0020'),
+					literal('\u00A0'),
+					literal('\uFEFF'),
+					match(/^\p{Zs}/u)
+				)
+			)
 		)(input);
 	}
 
@@ -909,7 +943,9 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	Comment
 	// 	JSON5Token
 	function scanJSON5InputElement(input: string): ScanResult {
-		return or(scanWhiteSpace, scanLineTerminator, scanComment, scanJSON5Token)(input);
+		// Note: this doesn't exactly follow the grammar because we want to treat
+		// \r\n as a single token.
+		return or(scanWhiteSpace, scanLineTerminatorSequence, scanComment, scanJSON5Token)(input);
 	}
 
 	function scanNext(): SyntaxKind {
@@ -936,31 +972,6 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			return token = SyntaxKind.EOF;
 		}
 
-		let code = text.charCodeAt(pos);
-		// trivia: whitespace
-		if (isWhiteSpace(code)) {
-			do {
-				pos++;
-				value += String.fromCharCode(code);
-				code = text.charCodeAt(pos);
-			} while (isWhiteSpace(code));
-
-			return token = SyntaxKind.Trivia;
-		}
-
-		// trivia: newlines
-		if (isLineBreak(code)) {
-			pos++;
-			value += String.fromCharCode(code);
-			if (code === CharacterCodes.carriageReturn && text.charCodeAt(pos) === CharacterCodes.lineFeed) {
-				pos++;
-				value += '\n';
-			}
-			lineNumber++;
-			tokenLineStartOffset = pos;
-			return token = SyntaxKind.LineBreakTrivia;
-		}
-
 		const currentState: ScanState = {
 			token,
 			value,
@@ -969,104 +980,14 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			lineNumber,
 			tokenLineStartOffset
 		};
-		let nextState: ScanState;
-		let scanResult: ScanResult;
-		switch (code) {
-			// punctuators, strings, numbers
-			case CharacterCodes.openBrace:
-			case CharacterCodes.closeBrace:
-			case CharacterCodes.openBracket:
-			case CharacterCodes.closeBracket:
-			case CharacterCodes.colon:
-			case CharacterCodes.comma:
-			case CharacterCodes.doubleQuote:
-			case CharacterCodes.singleQuote:
-			case CharacterCodes.minus:
-			case CharacterCodes.plus:
-			case CharacterCodes.dot:
-			case CharacterCodes._0:
-			case CharacterCodes._1:
-			case CharacterCodes._2:
-			case CharacterCodes._3:
-			case CharacterCodes._4:
-			case CharacterCodes._5:
-			case CharacterCodes._6:
-			case CharacterCodes._7:
-			case CharacterCodes._8:
-			case CharacterCodes._9:
-				scanResult = or(
-					scanJSON5Punctuator,
-					scanJSON5String,
-					scanJSON5Number
-				)(text.substring(pos));
-				nextState = computeNextScanState(currentState, scanResult);
-				updateState(nextState);
-				return token;
-
-			// comments
-			case CharacterCodes.slash:
-				if (
-					text.charCodeAt(pos + 1) === CharacterCodes.slash ||
-					text.charCodeAt(pos + 1) === CharacterCodes.asterisk
-				) {
-					scanResult = scanComment(text.substring(pos));
-					nextState = computeNextScanState(currentState, scanResult);
-					updateState(nextState);
-					return token;
-				}
-				// just a single slash
-				value += String.fromCharCode(code);
-				pos++;
-				return (token = SyntaxKind.Unknown);
-
-			// literals and unknown symbols
-			default:
-				// is a literal? Read the full word.
-				while (pos < len && isUnknownContentCharacter(code)) {
-					pos++;
-					code = text.charCodeAt(pos);
-				}
-				if (tokenOffset !== pos) {
-					value = text.substring(tokenOffset, pos);
-
-					scanResult = or(
-						complete(scanJSON5Identifier),
-						complete(scanBooleanLiteral),
-						complete(scanNullLiteral),
-						complete(scanJSON5Number)
-					)(value);
-
-					if (isSuccess(scanResult)) {
-						nextState = computeNextScanState(currentState, scanResult);
-						updateState(nextState);
-						return token;
-					}
-
-					return (token = SyntaxKind.Unknown);
-				}
-				// some
-				value += String.fromCharCode(code);
-				pos++;
-				return (token = SyntaxKind.Unknown);
+		const scanResult = scanJSON5InputElement(text.substring(pos));
+		const nextState = computeNextScanState(currentState, scanResult);
+		updateState(nextState);
+		if (isFailure(scanResult)) {
+			value += text[pos];
+			pos++;
 		}
-	}
-
-	function isUnknownContentCharacter(code: CharacterCodes) {
-		if (isWhiteSpace(code) || isLineBreak(code)) {
-			return false;
-		}
-		switch (code) {
-			case CharacterCodes.closeBrace:
-			case CharacterCodes.closeBracket:
-			case CharacterCodes.openBrace:
-			case CharacterCodes.openBracket:
-			case CharacterCodes.doubleQuote:
-			case CharacterCodes.colon:
-			case CharacterCodes.comma:
-			case CharacterCodes.slash:
-				return false;
-		}
-		return true;
+		return token;
 	}
 
 
@@ -1090,155 +1011,4 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		getTokenStartCharacter: () => tokenOffset - prevTokenLineStartOffset,
 		getTokenError: () => scanError,
 	};
-}
-
-function isWhiteSpace(ch: number): boolean {
-	return ch === CharacterCodes.space || ch === CharacterCodes.tab || ch === CharacterCodes.verticalTab || ch === CharacterCodes.formFeed ||
-		ch === CharacterCodes.nonBreakingSpace || ch === CharacterCodes.ogham || ch >= CharacterCodes.enQuad && ch <= CharacterCodes.zeroWidthSpace ||
-		ch === CharacterCodes.narrowNoBreakSpace || ch === CharacterCodes.mathematicalSpace || ch === CharacterCodes.ideographicSpace || ch === CharacterCodes.byteOrderMark;
-}
-
-function isLineBreak(ch: number): boolean {
-	return ch === CharacterCodes.lineFeed || ch === CharacterCodes.carriageReturn || ch === CharacterCodes.lineSeparator || ch === CharacterCodes.paragraphSeparator;
-}
-
-function isDigit(ch: number): boolean {
-	return ch >= CharacterCodes._0 && ch <= CharacterCodes._9;
-}
-
-const enum CharacterCodes {
-	nullCharacter = 0,
-	maxAsciiCharacter = 0x7F,
-
-	lineFeed = 0x0A,              // \n
-	carriageReturn = 0x0D,        // \r
-	lineSeparator = 0x2028,
-	paragraphSeparator = 0x2029,
-
-	// REVIEW: do we need to support this?  The scanner doesn't, but our IText does.  This seems
-	// like an odd disparity?  (Or maybe it's completely fine for them to be different).
-	nextLine = 0x0085,
-
-	// Unicode 3.0 space characters
-	space = 0x0020,   // " "
-	nonBreakingSpace = 0x00A0,   //
-	enQuad = 0x2000,
-	emQuad = 0x2001,
-	enSpace = 0x2002,
-	emSpace = 0x2003,
-	threePerEmSpace = 0x2004,
-	fourPerEmSpace = 0x2005,
-	sixPerEmSpace = 0x2006,
-	figureSpace = 0x2007,
-	punctuationSpace = 0x2008,
-	thinSpace = 0x2009,
-	hairSpace = 0x200A,
-	zeroWidthSpace = 0x200B,
-	narrowNoBreakSpace = 0x202F,
-	ideographicSpace = 0x3000,
-	mathematicalSpace = 0x205F,
-	ogham = 0x1680,
-
-	_ = 0x5F,
-	$ = 0x24,
-
-	_0 = 0x30,
-	_1 = 0x31,
-	_2 = 0x32,
-	_3 = 0x33,
-	_4 = 0x34,
-	_5 = 0x35,
-	_6 = 0x36,
-	_7 = 0x37,
-	_8 = 0x38,
-	_9 = 0x39,
-
-	a = 0x61,
-	b = 0x62,
-	c = 0x63,
-	d = 0x64,
-	e = 0x65,
-	f = 0x66,
-	g = 0x67,
-	h = 0x68,
-	i = 0x69,
-	j = 0x6A,
-	k = 0x6B,
-	l = 0x6C,
-	m = 0x6D,
-	n = 0x6E,
-	o = 0x6F,
-	p = 0x70,
-	q = 0x71,
-	r = 0x72,
-	s = 0x73,
-	t = 0x74,
-	u = 0x75,
-	v = 0x76,
-	w = 0x77,
-	x = 0x78,
-	y = 0x79,
-	z = 0x7A,
-
-	A = 0x41,
-	B = 0x42,
-	C = 0x43,
-	D = 0x44,
-	E = 0x45,
-	F = 0x46,
-	G = 0x47,
-	H = 0x48,
-	I = 0x49,
-	J = 0x4A,
-	K = 0x4B,
-	L = 0x4C,
-	M = 0x4D,
-	N = 0x4E,
-	O = 0x4F,
-	P = 0x50,
-	Q = 0x51,
-	R = 0x52,
-	S = 0x53,
-	T = 0x54,
-	U = 0x55,
-	V = 0x56,
-	W = 0x57,
-	X = 0x58,
-	Y = 0x59,
-	Z = 0x5a,
-
-	ampersand = 0x26,             // &
-	asterisk = 0x2A,              // *
-	at = 0x40,                    // @
-	backslash = 0x5C,             // \
-	bar = 0x7C,                   // |
-	caret = 0x5E,                 // ^
-	closeBrace = 0x7D,            // }
-	closeBracket = 0x5D,          // ]
-	closeParen = 0x29,            // )
-	colon = 0x3A,                 // :
-	comma = 0x2C,                 // ,
-	dot = 0x2E,                   // .
-	doubleQuote = 0x22,           // "
-	equals = 0x3D,                // =
-	exclamation = 0x21,           // !
-	greaterThan = 0x3E,           // >
-	lessThan = 0x3C,              // <
-	minus = 0x2D,                 // -
-	openBrace = 0x7B,             // {
-	openBracket = 0x5B,           // [
-	openParen = 0x28,             // (
-	percent = 0x25,               // %
-	plus = 0x2B,                  // +
-	question = 0x3F,              // ?
-	semicolon = 0x3B,             // ;
-	singleQuote = 0x27,           // '
-	slash = 0x2F,                 // /
-	tilde = 0x7E,                 // ~
-
-	backspace = 0x08,             // \b
-	formFeed = 0x0C,              // \f
-	byteOrderMark = 0xFEFF,
-	tab = 0x09,                   // \t
-	verticalTab = 0x0B,           // \v
 }
