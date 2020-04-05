@@ -480,9 +480,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 			case SyntaxKind.NaNKeyword:
 				let value = 0;
 				try {
-					// FIXME: The object wrapper is a workaround for
-					// https://github.com/json5/json5/issues/228.
-					value = JSON5.parse(`{value:${_scanner.getTokenValue()}}`).value;
+					value = JSON5.parse(_scanner.getTokenValue());
 					if (typeof value !== 'number') {
 						handleError(ParseErrorCode.InvalidNumberFormat);
 						value = 0;

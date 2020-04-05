@@ -36,6 +36,6 @@
     "postversion": "git push && git push --tags"
   },
   "dependencies": {
-    "json5": "^2.1.2"
+    "json5": "^2.1.3"
   }
 }
