@@ -14,13 +14,9 @@ import * as parser from './impl/parser';
 export const createScanner: (text: string, ignoreTrivia?: boolean) => JSONScanner = scanner.createScanner;
 
 export const enum ScanError {
-	None = 0,
-	UnexpectedEndOfComment = 1,
-	UnexpectedEndOfString = 2,
-	UnexpectedEndOfNumber = 3,
-	InvalidUnicode = 4,
-	InvalidEscapeCharacter = 5,
-	InvalidCharacter = 6
+	None,
+	UnexpectedEndOfComment,
+	UnexpectedEndOfString
 }
 
 export function printScanError(code: ScanError): string {
@@ -28,38 +24,36 @@ export function printScanError(code: ScanError): string {
 		case ScanError.None: return 'None';
 		case ScanError.UnexpectedEndOfComment: return 'UnexpectedEndOfComment';
 		case ScanError.UnexpectedEndOfString: return 'UnexpectedEndOfString';
-		case ScanError.UnexpectedEndOfNumber: return 'UnexpectedEndOfNumber';
-		case ScanError.InvalidUnicode: return 'InvalidUnicode';
-		case ScanError.InvalidEscapeCharacter: return 'InvalidEscapeCharacter';
-		case ScanError.InvalidCharacter: return 'InvalidCharacter';
 	}
 }
 
 export const enum SyntaxKind {
-	OpenBraceToken = 1,
-	CloseBraceToken = 2,
-	OpenBracketToken = 3,
-	CloseBracketToken = 4,
-	CommaToken = 5,
-	ColonToken = 6,
-	NullKeyword = 7,
-	TrueKeyword = 8,
-	FalseKeyword = 9,
-	StringLiteral = 10,
-	NumericLiteral = 11,
-	LineCommentTrivia = 12,
-	BlockCommentTrivia = 13,
-	LineBreakTrivia = 14,
-	Trivia = 15,
-	Unknown = 16,
-	EOF = 17,
-	Identifier = 18,
-	InfinityKeyword = 19,
-	NaNKeyword = 20
+	Unknown,
+	EOF,
+	OpenBraceToken,
+	CloseBraceToken,
+	OpenBracketToken,
+	CloseBracketToken,
+	CommaToken,
+	ColonToken,
+	NullKeyword,
+	TrueKeyword,
+	FalseKeyword,
+	StringLiteral,
+	NumericLiteral,
+	Identifier,
+	InfinityKeyword,
+	NaNKeyword,
+	LineCommentTrivia,
+	BlockCommentTrivia,
+	LineBreakTrivia,
+	Trivia
 }
 
 export function printSyntaxKind(code: SyntaxKind): string {
 	switch (code) {
+		case SyntaxKind.Unknown: return 'Unknown';
+		case SyntaxKind.EOF: return 'EOF';
 		case SyntaxKind.OpenBraceToken: return 'OpenBraceToken';
 		case SyntaxKind.CloseBraceToken: return 'CloseBraceToken';
 		case SyntaxKind.OpenBracketToken: return 'OpenBracketToken';
@@ -71,15 +65,13 @@ export function printSyntaxKind(code: SyntaxKind): string {
 		case SyntaxKind.FalseKeyword: return 'FalseKeyword';
 		case SyntaxKind.StringLiteral: return 'StringLiteral';
 		case SyntaxKind.NumericLiteral: return 'NumericLiteral';
+		case SyntaxKind.Identifier: return 'Identifier';
+		case SyntaxKind.InfinityKeyword: return 'InfinityKeyword';
+		case SyntaxKind.NaNKeyword: return 'NaNKeyword';
 		case SyntaxKind.LineCommentTrivia: return 'LineCommentTrivia';
 		case SyntaxKind.BlockCommentTrivia: return 'BlockCommentTrivia';
 		case SyntaxKind.LineBreakTrivia: return 'LineBreakTrivia';
 		case SyntaxKind.Trivia: return 'Trivia';
-		case SyntaxKind.Unknown: return 'Unknown';
-		case SyntaxKind.EOF: return 'EOF';
-		case SyntaxKind.Identifier: return 'Identifier';
-		case SyntaxKind.InfinityKeyword: return 'InfinityKeyword';
-		case SyntaxKind.NaNKeyword: return 'NaNKeyword';
 	}
 }
 
@@ -178,23 +170,18 @@ export interface ParseError {
 }
 
 export const enum ParseErrorCode {
-	InvalidSymbol = 1,
-	InvalidNumberFormat = 2,
-	PropertyNameExpected = 3,
-	ValueExpected = 4,
-	ColonExpected = 5,
-	CommaExpected = 6,
-	CloseBraceExpected = 7,
-	CloseBracketExpected = 8,
-	EndOfFileExpected = 9,
-	InvalidCommentToken = 10,
-	UnexpectedEndOfComment = 11,
-	UnexpectedEndOfString = 12,
-	UnexpectedEndOfNumber = 13,
-	InvalidUnicode = 14,
-	InvalidEscapeCharacter = 15,
-	InvalidCharacter = 16,
-	InvalidString = 17
+	InvalidSymbol,
+	InvalidNumberFormat,
+	PropertyNameExpected,
+	ValueExpected,
+	ColonExpected,
+	CommaExpected,
+	CloseBraceExpected,
+	CloseBracketExpected,
+	EndOfFileExpected,
+	UnexpectedEndOfComment,
+	UnexpectedEndOfString,
+	InvalidString
 }
 
 export function printParseErrorCode(code: ParseErrorCode): string {
@@ -208,13 +195,8 @@ export function printParseErrorCode(code: ParseErrorCode): string {
 		case ParseErrorCode.CloseBraceExpected: return 'CloseBraceExpected';
 		case ParseErrorCode.CloseBracketExpected: return 'CloseBracketExpected';
 		case ParseErrorCode.EndOfFileExpected: return 'EndOfFileExpected';
-		case ParseErrorCode.InvalidCommentToken: return 'InvalidCommentToken';
 		case ParseErrorCode.UnexpectedEndOfComment: return 'UnexpectedEndOfComment';
 		case ParseErrorCode.UnexpectedEndOfString: return 'UnexpectedEndOfString';
-		case ParseErrorCode.UnexpectedEndOfNumber: return 'UnexpectedEndOfNumber';
-		case ParseErrorCode.InvalidUnicode: return 'InvalidUnicode';
-		case ParseErrorCode.InvalidEscapeCharacter: return 'InvalidEscapeCharacter';
-		case ParseErrorCode.InvalidCharacter: return 'InvalidCharacter';
 		case ParseErrorCode.InvalidString: return 'InvalidString';
 	}
 }
