@@ -727,4 +727,19 @@ suite('JSON5', () => {
 		// extra decimal
 		assertKinds('.1.', SyntaxKind.NumericLiteral, SyntaxKind.Unknown);
 	});
+
+	test('parse: literals', () => {
+		assertValidParse("'foo'", 'foo');
+		assertValidParse('"a\\\nb"', 'ab');
+		assertValidParse("'a\\\nb'", 'ab');
+		assertValidParse('+9', 9);
+		assertValidParse('-0', -0);
+		assertValidParse('Infinity', Infinity);
+		assertValidParse('-Infinity', -Infinity);
+		assertValidParse('+Infinity', +Infinity);
+		assertValidParse('NaN', NaN);
+		assertValidParse('-NaN', -NaN);
+		assertValidParse('+NaN', +NaN);
+		assertValidParse('.1E-999 /* comment */', .1E-999);
+	});
 })

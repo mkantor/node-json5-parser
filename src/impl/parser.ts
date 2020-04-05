@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
+import JSON5 = require('json5');
 import { createScanner } from './scanner';
 import {
 	JSONPath,
@@ -484,7 +485,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 			case SyntaxKind.NumericLiteral:
 				let value = 0;
 				try {
-					value = JSON.parse(_scanner.getTokenValue());
+					value = JSON5.parse(_scanner.getTokenValue());
 					if (typeof value !== 'number') {
 						handleError(ParseErrorCode.InvalidNumberFormat);
 						value = 0;
