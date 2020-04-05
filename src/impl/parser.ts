@@ -456,7 +456,18 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 	}
 
 	function parseString(isValue: boolean): boolean {
-		const value = _scanner.getTokenValue();
+		let value = '';
+		try {
+			const parsed = JSON5.parse(_scanner.getTokenValue());
+			if (typeof parsed !== 'string') {
+				handleError(ParseErrorCode.InvalidString);
+				value = '';
+			} else {
+				value = parsed;
+			}
+		} catch (e) {
+			handleError(ParseErrorCode.InvalidString);
+		}
 		if (isValue) {
 			onLiteralValue(value);
 		} else {
@@ -480,10 +491,12 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 			case SyntaxKind.NaNKeyword:
 				let value = 0;
 				try {
-					value = JSON5.parse(_scanner.getTokenValue());
-					if (typeof value !== 'number') {
+					let parsed = JSON5.parse(_scanner.getTokenValue());
+					if (typeof parsed !== 'number') {
 						handleError(ParseErrorCode.InvalidNumberFormat);
 						value = 0;
+					} else {
+						value = parsed;
 					}
 				} catch (e) {
 					handleError(ParseErrorCode.InvalidNumberFormat);

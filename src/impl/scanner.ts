@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import JSON5 = require('json5');
 import { ScanError, SyntaxKind, JSONScanner } from '../main';
 import {
 	ScanResult,
@@ -104,11 +103,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			  }
 			: {
 					...baseState,
-					// String literals have values parsed for legacy reasons.
-					value:
-						scanResult.syntaxKind === SyntaxKind.StringLiteral
-							? JSON5.parse(scanResult.lexeme)
-							: scanResult.lexeme
+					value: scanResult.lexeme
 			  };
 	}
 
