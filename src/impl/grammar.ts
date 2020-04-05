@@ -199,10 +199,7 @@ function oneOrMore(scanner: Scanner): Scanner {
 }
 
 function optional(scanner: Scanner): Scanner {
-	return input => {
-		const result = or(scanner, nothing)(input);
-		return result;
-	};
+	return or(scanner, nothing);
 }
 
 function butNot(scanner: Scanner, not: Scanner): Scanner {
