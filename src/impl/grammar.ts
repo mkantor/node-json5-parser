@@ -32,6 +32,19 @@ export function isFailure(result: ScanResult): result is ScanFailure {
 	);
 }
 
+function concatenate(firstResult: ScanSuccess, secondResult: ScanSuccess): ScanSuccess {
+	return {
+		kind: 'success',
+		lexeme: firstResult.lexeme + secondResult.lexeme,
+		syntaxKind:
+			secondResult.lexeme === ''
+				? firstResult.syntaxKind
+				: firstResult.lexeme === ''
+				? secondResult.syntaxKind
+				: SyntaxKind.Unknown
+	};
+}
+
 function withSyntaxKind(syntaxKind: SyntaxKind, scanner: Scanner): Scanner {
 	return input => {
 		return { ...scanner(input), syntaxKind };
@@ -77,74 +90,54 @@ function match(pattern: RegExp): Scanner {
 	};
 }
 
-function combineAnd(
-	firstResult: ScanResult,
-	secondResult: ScanResult
-): ScanResult {
-	if (isFailure(firstResult) && isFailure(secondResult)) {
-		return {
-			...firstResult,
-			consumed: firstResult.consumed + secondResult.consumed
-		};
-	} else if (isFailure(firstResult)) {
-		return firstResult;
-	} else if (isFailure(secondResult)) {
-		return {
-			...secondResult,
-			consumed: firstResult.lexeme + secondResult.consumed
-		};
-	} else {
-		return {
-			kind: 'success',
-			lexeme: firstResult.lexeme + secondResult.lexeme,
-			syntaxKind:
-				secondResult.lexeme === ''
-					? firstResult.syntaxKind
-					: firstResult.lexeme === ''
-					? secondResult.syntaxKind
-					: SyntaxKind.Unknown
-		};
-	}
+function combineAnd(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		if (isFailure(firstResult)) {
+			return firstResult;
+		}
+
+		const remainingInput = input.substring(firstResult.lexeme.length);
+		const secondResult = second(remainingInput);
+		if (isFailure(secondResult)) {
+			return {
+				...secondResult,
+				consumed: firstResult.lexeme + secondResult.consumed
+			};
+		}
+
+		return concatenate(firstResult, secondResult);
+	};
 }
 
 /** This function is greedy; if both succeeded, return the longer result. */
-function combineOr(
-	firstResult: ScanResult,
-	secondResult: ScanResult
-): ScanResult {
-	if (isFailure(firstResult) && isFailure(secondResult)) {
-		if (firstResult.consumed >= secondResult.consumed) {
+function combineOr(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		const secondResult = second(input);
+		if (isFailure(firstResult) && isFailure(secondResult)) {
+			if (firstResult.consumed >= secondResult.consumed) {
+				return firstResult;
+			} else {
+				return secondResult;
+			}
+		} else if (isFailure(secondResult)) {
+			return firstResult;
+		} else if (isFailure(firstResult)) {
+			return secondResult;
+		} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
 			return firstResult;
 		} else {
 			return secondResult;
 		}
-	} else if (isFailure(secondResult)) {
-		return firstResult;
-	} else if (isFailure(firstResult)) {
-		return secondResult;
-	} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
-		return firstResult;
-	} else {
-		return secondResult;
-	}
+	};
 }
 
 function and(
 	firstScanner: Scanner,
 	...otherScanners: [Scanner, ...Scanner[]]
 ): Scanner {
-	return input => {
-		let result = firstScanner(input);
-		let remainingInput = input;
-		for (const scanner of otherScanners) {
-			if (isFailure(result)) {
-				break;
-			}
-			remainingInput = input.substring(result.lexeme.length);
-			result = combineAnd(result, scanner(remainingInput));
-		}
-		return result;
-	};
+	return otherScanners.reduce(combineAnd, firstScanner);
 }
 
 /**
@@ -155,47 +148,24 @@ function or(
 	firstScanner: Scanner,
 	...otherScanners: [Scanner, ...Scanner[]]
 ): Scanner {
-	return input => {
-		let result = firstScanner(input);
-		for (const scanner of otherScanners) {
-			result = combineOr(result, scanner(input));
-		}
-		return result;
-	};
+	return otherScanners.reduce(combineOr, firstScanner);
 }
 
 function zeroOrMore(scanner: Scanner): Scanner {
-	return input => {
-		let result = scanner(input);
-		if (isFailure(result)) {
-			return nothing(input);
+	const zeroOrMoreScanner = (input: string): ScanSuccess => {
+		const result = optional(scanner)(input);
+		if (isFailure(result) || (isSuccess(result) && result.lexeme === '')) {
+			return nothing();
+		} else {
+			const remainingInput = input.substring(result.lexeme.length);
+			return concatenate(result, zeroOrMoreScanner(remainingInput));
 		}
-		let remainingInput: string;
-		do {
-			remainingInput = isFailure(result)
-				? ''
-				: input.substring(result.lexeme.length);
-			const nextResult = scanner(remainingInput);
-			if (isFailure(nextResult)) {
-				break;
-			}
-			result = combineAnd(result, nextResult);
-		} while (remainingInput.length > 0);
-		return result;
 	};
+	return zeroOrMoreScanner;
 }
 
 function oneOrMore(scanner: Scanner): Scanner {
-	return input => {
-		const result = scanner(input);
-		if (isFailure(result)) {
-			return result;
-		}
-		const remainingInput = isFailure(result)
-			? ''
-			: input.substring(result.lexeme.length);
-		return combineAnd(result, zeroOrMore(scanner)(remainingInput));
-	};
+	return combineAnd(scanner, zeroOrMore(scanner));
 }
 
 function optional(scanner: Scanner): Scanner {
@@ -239,7 +209,7 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 	};
 }
 
-function nothing(input: string): ScanResult {
+function nothing(): ScanSuccess {
 	return {
 		kind: 'success',
 		lexeme: '',
