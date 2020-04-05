@@ -28,6 +28,7 @@ import {
 	printParseErrorCode,
 } from '../main';
 import { truncateSync } from 'fs';
+import JSON5 = require('json5');
 
 function assertKinds(text: string, ...kinds: [SyntaxKind, ...SyntaxKind[]]): void {
 	var scanner = createScanner(text);
@@ -71,8 +72,10 @@ function assertValidParse(input: string, expected: any, options?: ParseOptions):
 	const friendlyErrors = errors.map(error => {
 		return { ...error, type: printParseErrorCode(error.error) };
 	});
-	assert.deepEqual(errors, [], `errors occurred when parsing \`${input}\`: ${JSON.stringify(friendlyErrors)}`);
-	assert.deepEqual(actual, expected, `parse result of \`${input}\` was \`${JSON.stringify(actual)}\`, expected \`${JSON.stringify(expected)}\``);
+	assert.deepEqual(errors, [], `errors occurred when parsing \`${input}\`: ${JSON5.stringify(friendlyErrors)}`);
+	if (!(Number.isNaN(actual) && Number.isNaN(expected))) {
+		assert.deepEqual(actual, expected, `parse result of \`${input}\` was \`${JSON5.stringify(actual)}\`, expected \`${JSON5.stringify(expected)}\``);
+	}
 }
 
 function assertInvalidParse(input: string, expected: any, options?: ParseOptions): void {
@@ -99,7 +102,7 @@ function assertTree(input: string, expected: any, expectedErrors: ParseError[] =
 	};
 	checkParent(actual);
 
-	assert.deepEqual(actual, expected, `parse tree was not correct, was \`${JSON.stringify(actual)}\` but expected \`${JSON.stringify(expected)}\``);
+	assert.deepEqual(actual, expected, `parse tree was not correct, was \`${JSON5.stringify(actual)}\` but expected \`${JSON5.stringify(expected)}\``);
 }
 
 interface VisitorCallback {
@@ -135,7 +138,7 @@ function assertVisit(input: string, expected: VisitorCallback[], expectedErrors:
 		disallowComments
 	});
 	assert.deepEqual(errors, expectedErrors);
-	assert.deepEqual(actuals, expected, JSON.stringify(actuals));
+	assert.deepEqual(actuals, expected, JSON5.stringify(actuals));
 }
 
 function assertNodeAtLocation(input: Node, segments: Segment[], expected: any) {
