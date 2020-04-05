@@ -403,23 +403,11 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		while (true) {
 			const token = _scanner.scan();
 			switch (_scanner.getTokenError()) {
-				case ScanError.InvalidUnicode:
-					handleError(ParseErrorCode.InvalidUnicode);
-					break;
-				case ScanError.InvalidEscapeCharacter:
-					handleError(ParseErrorCode.InvalidEscapeCharacter);
-					break;
-				case ScanError.UnexpectedEndOfNumber:
-					handleError(ParseErrorCode.UnexpectedEndOfNumber);
-					break;
 				case ScanError.UnexpectedEndOfComment:
 					handleError(ParseErrorCode.UnexpectedEndOfComment);
 					break;
 				case ScanError.UnexpectedEndOfString:
 					handleError(ParseErrorCode.UnexpectedEndOfString);
-					break;
-				case ScanError.InvalidCharacter:
-					handleError(ParseErrorCode.InvalidCharacter);
 					break;
 			}
 			switch (token) {
