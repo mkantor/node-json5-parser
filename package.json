@@ -1,18 +1,18 @@
 {
-  "name": "jsonc-parser",
-  "version": "2.2.1",
-  "description": "Scanner and parser for JSON with comments.",
+  "name": "json5-parser",
+  "version": "0.0.0",
+  "description": "Scanner and parser for JSON5.",
   "main": "./lib/umd/main.js",
   "typings": "./lib/umd/main",
   "module": "./lib/esm/main.js",
-  "author": "Microsoft Corporation",
+  "author": "Matt Kantor",
   "repository": {
     "type": "git",
-    "url": "https://github.com/microsoft/node-jsonc-parser"
+    "url": "https://github.com/mkantor/node-json5-parser"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/microsoft/node-jsonc-parser/issues"
+    "url": "https://github.com/mkantor/node-json5-parser/issues"
   },
   "devDependencies": {
     "@types/json5": "^0.0.30",
