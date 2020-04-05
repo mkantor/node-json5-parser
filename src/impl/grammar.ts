@@ -32,6 +32,22 @@ export function isFailure(result: ScanResult): result is ScanFailure {
 	);
 }
 
+function concatenate(
+	firstResult: ScanSuccess,
+	secondResult: ScanSuccess
+): ScanSuccess {
+	return {
+		kind: 'success',
+		lexeme: firstResult.lexeme + secondResult.lexeme,
+		syntaxKind:
+			secondResult.lexeme === ''
+				? firstResult.syntaxKind
+				: firstResult.lexeme === ''
+				? secondResult.syntaxKind
+				: SyntaxKind.Unknown
+	};
+}
+
 function withSyntaxKind(syntaxKind: SyntaxKind, scanner: Scanner): Scanner {
 	return input => {
 		return { ...scanner(input), syntaxKind };
@@ -77,125 +93,97 @@ function match(pattern: RegExp): Scanner {
 	};
 }
 
-function combineAnd(
-	firstResult: ScanResult,
-	secondResult: ScanResult
-): ScanResult {
-	if (isFailure(firstResult) && isFailure(secondResult)) {
-		return {
-			...firstResult,
-			consumed: firstResult.consumed + secondResult.consumed
-		};
-	} else if (isFailure(firstResult)) {
-		return firstResult;
-	} else if (isFailure(secondResult)) {
-		return {
-			...secondResult,
-			consumed: firstResult.lexeme + secondResult.consumed
-		};
-	} else {
-		return {
-			kind: 'success',
-			lexeme: firstResult.lexeme + secondResult.lexeme,
-			syntaxKind:
-				secondResult.lexeme === ''
-					? firstResult.syntaxKind
-					: firstResult.lexeme === ''
-					? secondResult.syntaxKind
-					: SyntaxKind.Unknown
-		};
-	}
+function combineAnd(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		if (isFailure(firstResult)) {
+			return firstResult;
+		}
+
+		const remainingInput = input.substring(firstResult.lexeme.length);
+		const secondResult = second(remainingInput);
+		if (isFailure(secondResult)) {
+			return {
+				...secondResult,
+				consumed: firstResult.lexeme + secondResult.consumed
+			};
+		}
+
+		return concatenate(firstResult, secondResult);
+	};
 }
 
-/** This function is greedy; if both succeeded, return the longer result. */
-function combineOr(
-	firstResult: ScanResult,
-	secondResult: ScanResult
-): ScanResult {
-	if (isFailure(firstResult) && isFailure(secondResult)) {
-		if (firstResult.consumed >= secondResult.consumed) {
+function and(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineAnd);
+}
+
+function combineOr(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		if (isSuccess(firstResult)) {
+			return firstResult;
+		} else {
+			const secondResult = second(input);
+			if (isSuccess(secondResult)) {
+				return secondResult;
+			} else {
+				// Return the error that covers more input text.
+				if (firstResult.consumed.length >= secondResult.consumed.length) {
+					return firstResult;
+				} else {
+					return secondResult;
+				}
+			}
+		}
+	};
+}
+
+function or(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineOr);
+}
+
+function combineLongest(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		const secondResult = second(input);
+		if (isFailure(firstResult) && isFailure(secondResult)) {
+			// Return the error that covers more input text.
+			if (firstResult.consumed >= secondResult.consumed) {
+				return firstResult;
+			} else {
+				return secondResult;
+			}
+		} else if (isFailure(secondResult)) {
+			return firstResult;
+		} else if (isFailure(firstResult)) {
+			return secondResult;
+		} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
 			return firstResult;
 		} else {
 			return secondResult;
 		}
-	} else if (isFailure(secondResult)) {
-		return firstResult;
-	} else if (isFailure(firstResult)) {
-		return secondResult;
-	} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
-		return firstResult;
-	} else {
-		return secondResult;
-	}
-}
-
-function and(
-	firstScanner: Scanner,
-	...otherScanners: [Scanner, ...Scanner[]]
-): Scanner {
-	return input => {
-		let result = firstScanner(input);
-		let remainingInput = input;
-		for (const scanner of otherScanners) {
-			if (isFailure(result)) {
-				break;
-			}
-			remainingInput = input.substring(result.lexeme.length);
-			result = combineAnd(result, scanner(remainingInput));
-		}
-		return result;
 	};
 }
 
-/**
- * This function is greedy; if multiple scanners succeed, return the longest
- * result.
- */
-function or(
-	firstScanner: Scanner,
-	...otherScanners: [Scanner, ...Scanner[]]
-): Scanner {
-	return input => {
-		let result = firstScanner(input);
-		for (const scanner of otherScanners) {
-			result = combineOr(result, scanner(input));
-		}
-		return result;
-	};
+function longest(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineLongest);
 }
 
 function zeroOrMore(scanner: Scanner): Scanner {
-	return input => {
-		let result = scanner(input);
-		if (isFailure(result)) {
-			return nothing(input);
+	const zeroOrMoreScanner = (input: string): ScanSuccess => {
+		const result = optional(scanner)(input);
+		if (isFailure(result) || (isSuccess(result) && result.lexeme === '')) {
+			return nothing();
+		} else {
+			const remainingInput = input.substring(result.lexeme.length);
+			return concatenate(result, zeroOrMoreScanner(remainingInput));
 		}
-		let remainingInput: string;
-		do {
-			remainingInput = isFailure(result)
-				? ''
-				: input.substring(result.lexeme.length);
-			const nextResult = scanner(remainingInput);
-			if (isFailure(nextResult)) {
-				break;
-			}
-			result = combineAnd(result, nextResult);
-		} while (remainingInput.length > 0);
-		return result;
 	};
+	return zeroOrMoreScanner;
 }
 
 function oneOrMore(scanner: Scanner): Scanner {
-	return input => {
-		const result = scanner(input);
-		if (isFailure(result)) {
-			return result;
-		}
-		const remainingInput = isFailure(result)
-			? ''
-			: input.substring(result.lexeme.length);
-		return combineAnd(result, zeroOrMore(scanner)(remainingInput));
-	};
+	return combineAnd(scanner, zeroOrMore(scanner));
 }
 
 function optional(scanner: Scanner): Scanner {
@@ -239,7 +227,7 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 	};
 }
 
-function nothing(input: string): ScanResult {
+function nothing(): ScanSuccess {
 	return {
 		kind: 'success',
 		lexeme: '',
@@ -337,7 +325,7 @@ function decimalLiteral(input: string): ScanResult {
 function numericLiteral(input: string): ScanResult {
 	return withSyntaxKind(
 		SyntaxKind.NumericLiteral,
-		or(decimalLiteral, hexIntegerLiteral)
+		or(hexIntegerLiteral, decimalLiteral)
 	)(input);
 }
 
@@ -460,29 +448,7 @@ function sourceCharacter(input: string): ScanResult {
 // NonEscapeCharacter ::
 // 	SourceCharacter but not one of EscapeCharacter or LineTerminator
 function nonEscapeCharacter(input: string): ScanResult {
-	const result = sourceCharacter(input);
-	if (isSuccess(result)) {
-		if (isSuccess(escapeCharacter(input))) {
-			return {
-				kind: 'failure',
-				error: new Error(
-					`Scanned escape character when trying to scan non-escape character from "${input}"`
-				),
-				consumed: '',
-				syntaxKind: SyntaxKind.Unknown
-			};
-		} else if (isSuccess(lineTerminator(input))) {
-			return {
-				kind: 'failure',
-				error: new Error(
-					`Scanned line terminator when trying to scan non-escape character from "${input}"`
-				),
-				consumed: '',
-				syntaxKind: SyntaxKind.Unknown
-			};
-		}
-	}
-	return result;
+	return butNot(sourceCharacter, or(escapeCharacter, lineTerminator))(input);
 }
 
 // CharacterEscapeSequence ::
@@ -624,15 +590,15 @@ function unicodeDigit(input: string): ScanResult {
 }
 
 // UnicodeCombiningMark ::
-// 	any character in the Unicode categories "Non-spacing mark (Mn)" or 
+// 	any character in the Unicode categories "Non-spacing mark (Mn)" or
 // 		"Combining spacing mark (Mc)"
 function unicodeCombiningMark(input: string): ScanResult {
 	return match(/^\p{Mn}|^\p{Mc}/u)(input);
 }
 
 // UnicodeLetter ::
-// 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase 
-//		letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other 
+// 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase
+//		letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other
 //		letter (Lo)", or "Letter number (Nl)".
 function unicodeLetter(input: string): ScanResult {
 	return match(/^\p{Lu}|^\p{Ll}|^\p{Lt}|^\p{Lm}|^\p{Lo}|^\p{Nl}/u)(input);
@@ -676,8 +642,8 @@ function identifierPart(input: string): ScanResult {
 function identifierName(input: string): ScanResult {
 	// Note: this doesn't exactly follow the grammar to avoid recursion.
 	return or(
-		identifierStart,
-		and(identifierStart, oneOrMore(identifierPart))
+		and(identifierStart, oneOrMore(identifierPart)),
+		identifierStart
 	)(input);
 }
 
@@ -686,7 +652,7 @@ function identifierName(input: string): ScanResult {
 function json5Identifier(input: string): ScanResult {
 	// Note: this doesn't exactly follow the grammar to get specific kinds for
 	// keywords.
-	return or(
+	return longest(
 		withSyntaxKind(SyntaxKind.Identifier, identifierName),
 		nullLiteral,
 		trueLiteral,
