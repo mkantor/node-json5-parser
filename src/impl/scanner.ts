@@ -107,22 +107,43 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	type ScanSuccess = {
 		kind: 'success';
 		lexeme: string;
+		syntaxKind: SyntaxKind;
 	};
 	type ScanFailure = {
 		kind: 'failure';
 		error: Error;
 		consumed: string;
+		syntaxKind: SyntaxKind;
 	};
 	type ScanResult = ScanSuccess | ScanFailure;
 
 	type Scanner = (input: string) => ScanResult;
 
 	function isSuccess(result: ScanResult): result is ScanSuccess {
-		return result.kind === 'success' && typeof result.lexeme === 'string';
+		return (
+			result.kind === 'success' &&
+			typeof result.lexeme === 'string' &&
+			typeof result.syntaxKind === 'number'
+		);
 	}
 
 	function isFailure(result: ScanResult): result is ScanFailure {
-		return result.kind === 'failure' && result.error instanceof Error;
+		return (
+			result.kind === 'failure' &&
+			result.error instanceof Error &&
+			typeof result.consumed === 'string' &&
+			typeof result.syntaxKind === 'number'
+		);
+	}
+
+	function withSyntaxKind(syntaxKind: SyntaxKind, scanner: Scanner): Scanner {
+		const scanWithSyntaxKind = (input: string) => {
+			return { ...scanner(input), syntaxKind };
+		};
+		Object.defineProperty(scanWithSyntaxKind, 'name', {
+			value: `withSyntaxKind(${syntaxKind}, ${scanner.name})`
+		});
+		return scanWithSyntaxKind;
 	}
 
 	function literal(text: string): Scanner {
@@ -130,13 +151,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			if (input.startsWith(text)) {
 				return {
 					kind: 'success',
-					lexeme: text
+					lexeme: text,
+					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			} else {
 				return {
 					kind: 'failure',
 					error: new Error(`Unable to scan literal "${text}" from "${input}"`),
-					consumed: ''
+					consumed: '',
+					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			}
 		};
@@ -152,13 +175,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			if (match !== null && match.index === 0) {
 				return {
 					kind: 'success',
-					lexeme: match[0]
+					lexeme: match[0],
+					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			} else {
 				return {
 					kind: 'failure',
 					error: new Error(`Unable to scan match ${pattern} from "${input}"`),
-					consumed: ''
+					consumed: '',
+					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			}
 		};
@@ -188,7 +213,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		} else {
 			return {
 				kind: 'success',
-				lexeme: firstResult.lexeme + secondResult.lexeme
+				lexeme: firstResult.lexeme + secondResult.lexeme,
+				syntaxKind: SyntaxKind.Unknown
 			};
 		}
 	}
@@ -305,7 +331,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					return {
 						kind: 'failure',
 						error: new Error(`Matched ${scanner.name} but also matched ${not.name} with "${input}"`),
-						consumed: result.lexeme
+						consumed: result.lexeme,
+						syntaxKind: SyntaxKind.Unknown
 					} as const
 				}
 			}
@@ -326,7 +353,8 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 					return {
 						kind: 'failure',
 						error: new Error(`Lookahead detected invalid input "${input}"`),
-						consumed: result.lexeme
+						consumed: result.lexeme,
+						syntaxKind: SyntaxKind.Unknown
 					} as const
 				}
 			}
@@ -341,21 +369,20 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	function scanNothing(input: string): ScanResult {
 		return {
 			kind: 'success',
-			lexeme: ''
+			lexeme: '',
+			syntaxKind: SyntaxKind.Unknown
 		};
 	}
 
 	function scanEmpty(input: string): ScanResult {
 		if (input.length === 0) {
-			return {
-				kind: 'success',
-				lexeme: ''
-			};
+			return scanNothing(input);
 		} else {
 			return {
 				kind: 'failure',
 				error: new Error(`Input "${input}" was not empty`),
-				consumed: ''
+				consumed: '',
+				syntaxKind: SyntaxKind.Unknown
 			};
 		}
 	}
@@ -452,7 +479,14 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	+ JSON5NumericLiteral
 	// 	- JSON5NumericLiteral
 	function scanJSON5Number(input: string): ScanResult {
-		return or(scanJSON5NumericLiteral, and(literal('+'), scanJSON5NumericLiteral), and(literal('-'), scanJSON5NumericLiteral))(input);
+		return withSyntaxKind(
+			SyntaxKind.NumericLiteral,
+			or(
+				scanJSON5NumericLiteral,
+				and(literal('+'), scanJSON5NumericLiteral),
+				and(literal('-'), scanJSON5NumericLiteral)
+			)
+		)(input);
 	}
 
 	// LineTerminator ::
@@ -534,13 +568,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		if (codePoint !== undefined) {
 			return {
 				kind: 'success',
-				lexeme: String.fromCodePoint(codePoint)
+				lexeme: String.fromCodePoint(codePoint),
+				syntaxKind: SyntaxKind.Unknown
 			};
 		} else {
 			return {
 				kind: 'failure',
 				error: new Error(`Unable to scan source character from "${input}"`),
-				consumed: ''
+				consumed: '',
+				syntaxKind: SyntaxKind.Unknown
 			};
 		}
 	}
@@ -554,13 +590,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 				return {
 					kind: 'failure',
 					error: new Error(`Scanned escape character when trying to scan non-escape character from "${input}"`),
-					consumed: ''
+					consumed: '',
+					syntaxKind: SyntaxKind.Unknown
 				};
 			} else if (isSuccess(scanLineTerminator(input))) {
 				return {
 					kind: 'failure',
 					error: new Error(`Scanned line terminator when trying to scan non-escape character from "${input}"`),
-					consumed: ''
+					consumed: '',
+					syntaxKind: SyntaxKind.Unknown
 				};
 			}
 		}
@@ -636,9 +674,12 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	"JSON5DoubleStringCharacters(opt)"
 	// 	'JSON5SingleStringCharacters(opt)'
 	function scanJSON5String(input: string): ScanResult {
-		return or(
-			and(literal('"'), zeroOrMore(scanJSON5DoubleStringCharacters), literal('"')),
-			and(literal("'"), zeroOrMore(scanJSON5SingleStringCharacters), literal("'"))
+		return withSyntaxKind(
+			SyntaxKind.StringLiteral,
+			or(
+				and(literal('"'), zeroOrMore(scanJSON5DoubleStringCharacters), literal('"')),
+				and(literal("'"), zeroOrMore(scanJSON5SingleStringCharacters), literal("'"))
+			)
 		)(input);
 	}
 
@@ -646,7 +687,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// 	true
 	// 	false
 	function scanBooleanLiteral(input: string): ScanResult {
-		return or(literal('true'), literal('false'))(input);
+		return or(
+			withSyntaxKind(SyntaxKind.TrueKeyword, literal('true')),
+			withSyntaxKind(SyntaxKind.FalseKeyword, literal('false'))
+		)(input);
 	}
 
 	// JSON5Boolean ::
@@ -658,7 +702,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// NullLiteral ::
 	// 	null
 	function scanNullLiteral(input: string): ScanResult {
-		return literal('null')(input);
+		return withSyntaxKind(SyntaxKind.NullKeyword, literal('null'))(input);
 	}
 
 	// JSON5Null ::
@@ -671,12 +715,12 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	//	{ } [ ] : ,
 	function scanJSON5Punctuator(input: string): ScanResult {
 		return or(
-			literal('{'),
-			literal('}'),
-			literal('['),
-			literal(']'),
-			literal(':'),
-			literal(',')
+			withSyntaxKind(SyntaxKind.OpenBraceToken, literal('{')),
+			withSyntaxKind(SyntaxKind.CloseBraceToken, literal('}')),
+			withSyntaxKind(SyntaxKind.OpenBracketToken, literal('[')),
+			withSyntaxKind(SyntaxKind.CloseBracketToken, literal(']')),
+			withSyntaxKind(SyntaxKind.ColonToken, literal(':')),
+			withSyntaxKind(SyntaxKind.CommaToken, literal(','))
 		)(input);
 	}
 
@@ -773,7 +817,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// SingleLineComment ::
 	// 	// SingleLineCommentChars(opt)
 	function scanSingleLineComment(input: string): ScanResult {
-		return and(literal('//'), optional(scanSingleLineCommentChars))(input);
+		return withSyntaxKind(
+			SyntaxKind.LineCommentTrivia,
+			and(literal('//'), optional(scanSingleLineCommentChars))
+		)(input);
 	}
 
 	// MultiLineNotForwardSlashOrAsteriskChar ::
@@ -812,7 +859,10 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	// MultiLineComment ::
 	// 	/* MultiLineCommentChars(opt) */
 	function scanMultiLineComment(input: string): ScanResult {
-		return and(literal('/*'), optional(scanMultiLineCommentChars), literal('*/'))(input);
+		return withSyntaxKind(
+			SyntaxKind.BlockCommentTrivia,
+			and(literal('/*'), optional(scanMultiLineCommentChars), literal('*/'))
+		)(input);
 	}
 
 	// Comment ::
