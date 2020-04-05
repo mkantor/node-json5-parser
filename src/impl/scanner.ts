@@ -33,7 +33,27 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		prevTokenLineStartOffset = 0,
 		scanError: ScanError = ScanError.None;
 
-	function computeNextScanState(previousState: ScanState, scanResult: ScanResult, token: SyntaxKind): ScanState {
+	function computeNextScanState(previousState: ScanState, scanResult: ScanResult): ScanState {
+		type ErrorAttributesMap = { [key in SyntaxKind]: Partial<ScanState> }
+		const errorAttributesMap: ErrorAttributesMap = {
+			[SyntaxKind.OpenBraceToken]: {},
+			[SyntaxKind.CloseBraceToken]: {},
+			[SyntaxKind.OpenBracketToken]: {},
+			[SyntaxKind.CloseBracketToken]: {},
+			[SyntaxKind.ColonToken]: {},
+			[SyntaxKind.CommaToken]: {},
+			[SyntaxKind.StringLiteral]: { scanError: ScanError.UnexpectedEndOfString },
+			[SyntaxKind.NumericLiteral]: { token: SyntaxKind.Unknown },
+			[SyntaxKind.LineCommentTrivia]: { scanError: ScanError.UnexpectedEndOfComment },
+			[SyntaxKind.BlockCommentTrivia]: { scanError: ScanError.UnexpectedEndOfComment },
+			[SyntaxKind.TrueKeyword]: { token: SyntaxKind.Unknown },
+			[SyntaxKind.FalseKeyword]: { token: SyntaxKind.Unknown },
+			[SyntaxKind.NullKeyword]: { token: SyntaxKind.Unknown },
+			[SyntaxKind.LineBreakTrivia]: {},
+			[SyntaxKind.Trivia]: {},
+			[SyntaxKind.Unknown]: {},
+			[SyntaxKind.EOF]: {}
+		};
 		const consumed = isFailure(scanResult) ? scanResult.consumed : scanResult.lexeme;
 		const pos = previousState.pos + consumed.length;
 
@@ -52,48 +72,26 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			}
 		}
 
-		const intermediateState = {
+		const baseState = {
 			...previousState,
-			token,
+			token: scanResult.syntaxKind,
 			pos,
 			lineNumber,
 			tokenLineStartOffset
 		};
-
-		if (token === SyntaxKind.StringLiteral) {
-			return isFailure(scanResult)
-				? {
-						...intermediateState,
-						scanError: ScanError.UnexpectedEndOfString
-				  }
-				: {
-						...intermediateState,
-						value: JSON5.parse(scanResult.lexeme)
-				  };
-		} else if (token === SyntaxKind.NumericLiteral) {
-			return isFailure(scanResult)
-				? {
-						...intermediateState,
-						token: SyntaxKind.Unknown
-				  }
-				: {
-						...intermediateState,
-						value: scanResult.lexeme
-				  };
-		} else if (token === SyntaxKind.LineCommentTrivia || token === SyntaxKind.BlockCommentTrivia) {
-			return isFailure(scanResult)
-				? {
-						...intermediateState,
-						scanError: ScanError.UnexpectedEndOfComment
-				  }
-				: {
-						...intermediateState,
-						value: scanResult.lexeme
-				  };
-		} else {
-			// TODO
-			throw new Error('Not all token types have been implemented yet!');
-		}
+		return isFailure(scanResult)
+			? {
+					...baseState,
+					...errorAttributesMap[scanResult.syntaxKind]
+			  }
+			: {
+					...baseState,
+					// String literals have values parsed for legacy reasons.
+					value:
+						scanResult.syntaxKind === SyntaxKind.StringLiteral
+							? JSON5.parse(scanResult.lexeme)
+							: scanResult.lexeme
+			  };
 	}
 
 	function setPosition(newPosition: number) {
@@ -961,57 +959,15 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 		let nextState: ScanState;
 		let scanResult: ScanResult;
 		switch (code) {
-			// tokens: []{}:,
+			// punctuators, strings, numbers
 			case CharacterCodes.openBrace:
-				pos++;
-				return token = SyntaxKind.OpenBraceToken;
 			case CharacterCodes.closeBrace:
-				pos++;
-				return token = SyntaxKind.CloseBraceToken;
 			case CharacterCodes.openBracket:
-				pos++;
-				return token = SyntaxKind.OpenBracketToken;
 			case CharacterCodes.closeBracket:
-				pos++;
-				return token = SyntaxKind.CloseBracketToken;
 			case CharacterCodes.colon:
-				pos++;
-				return token = SyntaxKind.ColonToken;
 			case CharacterCodes.comma:
-				pos++;
-				return token = SyntaxKind.CommaToken;
-
-			// strings
 			case CharacterCodes.doubleQuote:
 			case CharacterCodes.singleQuote:
-				scanResult = scanJSON5String(text.substring(pos));
-				nextState = computeNextScanState(currentState, scanResult, SyntaxKind.StringLiteral);
-				updateState(nextState);
-				return token;
-
-			// comments
-			case CharacterCodes.slash:
-				// Single-line comment
-				if (text.charCodeAt(pos + 1) === CharacterCodes.slash) {
-					scanResult = scanSingleLineComment(text.substring(pos));
-					nextState = computeNextScanState(currentState, scanResult, SyntaxKind.LineCommentTrivia);
-					updateState(nextState);
-					return token;
-				}
-
-				// Multi-line comment
-				if (text.charCodeAt(pos + 1) === CharacterCodes.asterisk) {
-					scanResult = scanMultiLineComment(text.substring(pos));
-					nextState = computeNextScanState(currentState, scanResult, SyntaxKind.BlockCommentTrivia);
-					updateState(nextState);
-					return token;
-				}
-				// just a single slash
-				value += String.fromCharCode(code);
-				pos++;
-				return token = SyntaxKind.Unknown;
-
-			// numbers
 			case CharacterCodes.minus:
 			case CharacterCodes.plus:
 			case CharacterCodes.dot:
@@ -1025,10 +981,30 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			case CharacterCodes._7:
 			case CharacterCodes._8:
 			case CharacterCodes._9:
-				scanResult = scanJSON5Number(text.substring(pos));
-				nextState = computeNextScanState(currentState, scanResult, SyntaxKind.NumericLiteral);
+				scanResult = or(
+					scanJSON5Punctuator,
+					scanJSON5String,
+					scanJSON5Number
+				)(text.substring(pos));
+				nextState = computeNextScanState(currentState, scanResult);
 				updateState(nextState);
 				return token;
+
+			// comments
+			case CharacterCodes.slash:
+				if (
+					text.charCodeAt(pos + 1) === CharacterCodes.slash ||
+					text.charCodeAt(pos + 1) === CharacterCodes.asterisk
+				) {
+					scanResult = scanComment(text.substring(pos));
+					nextState = computeNextScanState(currentState, scanResult);
+					updateState(nextState);
+					return token;
+				}
+				// just a single slash
+				value += String.fromCharCode(code);
+				pos++;
+				return (token = SyntaxKind.Unknown);
 
 			// literals and unknown symbols
 			default:
