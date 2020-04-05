@@ -262,7 +262,6 @@ export interface Location {
 }
 
 export interface ParseOptions {
-	disallowComments?: boolean;
 	allowEmptyContent?: boolean;
 }
 
@@ -303,7 +302,7 @@ export interface JSONVisitor {
 	onSeparator?: (character: string, offset: number, length: number, startLine: number, startCharacter: number) => void;
 
 	/**
-	 * When comments are allowed, invoked when a line or block comment is encountered. The offset and length represent the location of the comment.
+	 * Invoked when a line or block comment is encountered. The offset and length represent the location of the comment.
 	 */
 	onComment?: (offset: number, length: number, startLine: number, startCharacter: number) => void;
 

@@ -399,7 +399,6 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		onComment = toNoArgVisit(visitor.onComment),
 		onError = toOneArgVisit(visitor.onError);
 
-	const disallowComments = options && options.disallowComments;
 	function scanNext(): SyntaxKind {
 		while (true) {
 			const token = _scanner.scan();
@@ -414,9 +413,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 					handleError(ParseErrorCode.UnexpectedEndOfNumber);
 					break;
 				case ScanError.UnexpectedEndOfComment:
-					if (!disallowComments) {
-						handleError(ParseErrorCode.UnexpectedEndOfComment);
-					}
+					handleError(ParseErrorCode.UnexpectedEndOfComment);
 					break;
 				case ScanError.UnexpectedEndOfString:
 					handleError(ParseErrorCode.UnexpectedEndOfString);
@@ -428,11 +425,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 			switch (token) {
 				case SyntaxKind.LineCommentTrivia:
 				case SyntaxKind.BlockCommentTrivia:
-					if (disallowComments) {
-						handleError(ParseErrorCode.InvalidCommentToken);
-					} else {
-						onComment();
-					}
+					onComment();
 					break;
 				case SyntaxKind.Unknown:
 					handleError(ParseErrorCode.InvalidSymbol);

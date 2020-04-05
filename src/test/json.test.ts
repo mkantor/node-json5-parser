@@ -148,7 +148,7 @@ interface VisitorError extends ParseError {
 	startCharacter: number;
 }
 
-function assertVisit(input: string, expected: VisitorCallback[], expectedErrors: VisitorError[] = [], disallowComments = false): void {
+function assertVisit(input: string, expected: VisitorCallback[], expectedErrors: VisitorError[] = []): void {
 	let errors: VisitorError[] = [];
 	let actuals: VisitorCallback[] = [];
 	let noArgHandler = (id: keyof JSONVisitor) => (offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter });
@@ -165,8 +165,6 @@ function assertVisit(input: string, expected: VisitorCallback[], expectedErrors:
 		onError: (error: ParseErrorCode, offset: number, length: number, startLine: number, startCharacter: number) => {
 			errors.push({ error, offset, length, startLine, startCharacter })
 		}
-	}, {
-		disallowComments
 	});
 
 	assert.deepEqual(errors, expectedErrors, `visitor did not get expected errors, was ${printVisitorErrors(errors)} but expected ${printVisitorErrors(expectedErrors)}`);
@@ -336,15 +334,6 @@ suite('JSON', () => {
 	test('parse: errors', () => {
 		assertInvalidParse('', undefined);
 		assertInvalidParse('1,1', 1);
-	});
-
-	test('parse: disallow comments', () => {
-		let options = { disallowComments: true };
-
-		assertValidParse('[ 1, 2, null, "foo" ]', [1, 2, null, 'foo'], options);
-		assertValidParse('{ "hello": [], "world": {} }', { hello: [], world: {} }, options);
-
-		assertInvalidParse('{ "foo": /*comment*/ true }', { foo: true }, options);
 	});
 
 	test('location: properties', () => {
@@ -1025,19 +1014,6 @@ suite('JSON5', () => {
 			{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
 			{ id: 'onObjectEnd', text: '}', startLine: 2, startCharacter: 6 },
 		]);
-		assertVisit('/* g\n */ { "foo": //f\n"bar"\n}',
-			[
-				{ id: 'onObjectBegin', text: '{', startLine: 1, startCharacter: 4 },
-				{ id: 'onObjectProperty', text: '"foo"', startLine: 1, startCharacter: 6, arg: 'foo' },
-				{ id: 'onSeparator', text: ':', startLine: 1, startCharacter: 11, arg: ':' },
-				{ id: 'onLiteralValue', text: '"bar"', startLine: 2, startCharacter: 0, arg: 'bar' },
-				{ id: 'onObjectEnd', text: '}', startLine: 3, startCharacter: 0 },
-			],
-			[
-				{ error: ParseErrorCode.InvalidCommentToken, offset: 0, length: 8, startLine: 0, startCharacter: 0 },
-				{ error: ParseErrorCode.InvalidCommentToken, offset: 18, length: 3, startLine: 1, startCharacter: 13 },
-			],
-			true);
 	});
 
 	test('visit: object', () => {
