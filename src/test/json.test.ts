@@ -30,39 +30,70 @@ import {
 import { truncateSync } from 'fs';
 import JSON5 = require('json5');
 
+function printKinds(kinds: SyntaxKind[]): string {
+	return JSON5.stringify(kinds.map(printSyntaxKind));
+}
+
+function printVisitorErrors(errors: VisitorError[]): string {
+	return JSON5.stringify(
+		errors.map(error => {
+			return {
+				...error,
+				error: printParseErrorCode(error.error)
+			};
+		})
+	);
+}
+
 function assertKinds(text: string, ...kinds: [SyntaxKind, ...SyntaxKind[]]): void {
-	var scanner = createScanner(text);
-	var kind: SyntaxKind;
-	let count = 0;
+	const scanner = createScanner(text);
+	let kind: SyntaxKind;
+
+	const actualKinds = [];
 	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
-		count++;
-		const expectedKind = kinds.shift();
+		actualKinds.push(kind);
+	}
+	scanner.setPosition(0);
+
+	const scannedKinds = [];
+	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
+		const expectedKind = kinds[scannedKinds.length];
+		scannedKinds.push(kind);
 		if (expectedKind === undefined) {
-			assert.fail(`extra token found in text \`${text}\`, kind: ${printSyntaxKind(kind)}`)
+			assert.fail(`extra token(s) found in text \`${text}\`, was ${printKinds(actualKinds)} but expected ${printKinds(kinds)}`);
 		}
-		assert.equal(kind, expectedKind, `kind was not correct for text \`${text}\`, was ${printSyntaxKind(kind)} but expected ${printSyntaxKind(expectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
+		assert.equal(kind, expectedKind, `kinds were not correct for text \`${text}\`, was ${printKinds(actualKinds)} but expected ${printKinds(kinds)}`);
 		assert.equal(scanner.getTokenError(), ScanError.None, `error ${printScanError(scanner.getTokenError())} while scanning text \`${text}\``);
 	}
-	assert.equal(kinds.length, 0, `not enough tokens found in text \`${text}\`, found ${count} but expected ${count + kinds.length}`);
+	assert.equal(kinds.length, scannedKinds.length, `wrong number of tokens found in text \`${text}\`, found ${printKinds(scannedKinds)} but expected ${printKinds(kinds)}]`);
 }
+
 function assertScanError(text: string, scanError: ScanError, ...kinds: [SyntaxKind, ...SyntaxKind[]]): void {
-	var scanner = createScanner(text);
+	const scanner = createScanner(text);
+	let kind: SyntaxKind;
+
+	const actualKinds = [];
+	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
+		actualKinds.push(kind);
+	}
+	scanner.setPosition(0);
+
 	scanner.scan();
-	const firstExpectedKind = kinds[0]; kinds.shift();
+	const firstExpectedKind = kinds[0];
 	const firstActualKind = scanner.getToken();
-	assert.equal(firstActualKind, firstExpectedKind, `initial kind was not correct for text \`${text}\`, was ${printSyntaxKind(firstActualKind)} but expected ${printSyntaxKind(firstExpectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
+	assert.equal(firstActualKind, firstExpectedKind, `first kind was not correct for text \`${text}\`, was ${printKinds(actualKinds)} but expected ${printKinds(kinds)}`);
 	const actualError = scanner.getTokenError();
 	assert.equal(actualError, scanError, `error was not correct for text \`${text}\`, was ${printScanError(actualError)} but expected ${printScanError(scanError)}`);
-	var kind: SyntaxKind;
-	let count = 0;
+	const scannedKinds = [firstActualKind];
 	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
-		const expectedKind = kinds.shift();
+		const expectedKind = kinds[scannedKinds.length];
+		scannedKinds.push(kind);
 		if (expectedKind === undefined) {
-			assert.fail(`extra token found in text \`${text}\`, kind: ${printSyntaxKind(kind)}`)
+			assert.fail(`extra token found in text \`${text}\`, kind: ${printSyntaxKind(kind)} from value \`${scanner.getTokenValue()}\``);
 		}
-		assert.equal(kind, expectedKind, `kind was not correct for text \`${text}\`, was ${printSyntaxKind(kind)} but expected ${printSyntaxKind(expectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
+		assert.equal(kind, expectedKind, `kinds were not correct for text \`${text}\`, was ${printKinds(actualKinds)} but expected ${printKinds(kinds)}, token error: ${printScanError(scanner.getTokenError())}`);
 	}
-	assert.equal(kinds.length, 0, `not enough tokens found in text \`${text}\`, found ${count} but expected ${count + kinds.length}`);
+	assert.equal(kinds.length, scannedKinds.length, `wrong number of tokens found in text \`${text}\`, found ${printKinds(scannedKinds)} but expected ${printKinds(kinds)}`);
 }
 
 function assertValidParse(input: string, expected: any, options?: ParseOptions): void {
@@ -74,7 +105,7 @@ function assertValidParse(input: string, expected: any, options?: ParseOptions):
 	});
 	assert.deepEqual(errors, [], `errors occurred when parsing \`${input}\`: ${JSON5.stringify(friendlyErrors)}`);
 	if (!(Number.isNaN(actual) && Number.isNaN(expected))) {
-		assert.deepEqual(actual, expected, `parse result of \`${input}\` was \`${JSON5.stringify(actual)}\`, expected \`${JSON5.stringify(expected)}\``);
+		assert.deepEqual(actual, expected, `parse result of \`${input}\` was ${JSON5.stringify(actual)}, expected ${JSON5.stringify(expected)}`);
 	}
 }
 
@@ -82,19 +113,19 @@ function assertInvalidParse(input: string, expected: any, options?: ParseOptions
 	var errors: ParseError[] = [];
 	var actual = parse(input, errors, options);
 
-	assert(errors.length > 0);
-	assert.deepEqual(actual, expected);
+	assert(errors.length > 0, `parse result of \`${input}\` had no errors, expected an error`);
+	assert.deepEqual(actual, expected, `parse result of \`${input}\` was ${JSON5.stringify(actual)}, expected ${JSON5.stringify(expected)} (with errors)`);
 }
 
 function assertTree(input: string, expected: any, expectedErrors: ParseError[] = []): void {
 	var errors: ParseError[] = [];
 	var actual = parseTree(input, errors);
 
-	assert.deepEqual(errors, expectedErrors);
+	assert.deepEqual(errors, expectedErrors, `parse tree had unexpected errors, expected ${JSON5.stringify(expectedErrors)} but got ${JSON5.stringify(errors)}`);
 	let checkParent = (node: Node) => {
 		if (node.children) {
 			for (let child of node.children) {
-				assert.equal(node, child.parent);
+				assert.equal(node, child.parent, `parse tree was not correct, expected parent of ${child} to be ${node}`);
 				delete (<any>child).parent; // delete to avoid recursion in deep equal
 				checkParent(child);
 			}
@@ -102,7 +133,7 @@ function assertTree(input: string, expected: any, expectedErrors: ParseError[] =
 	};
 	checkParent(actual);
 
-	assert.deepEqual(actual, expected, `parse tree was not correct, was \`${JSON5.stringify(actual)}\` but expected \`${JSON5.stringify(expected)}\``);
+	assert.deepEqual(actual, expected, `parse tree was not correct, was ${JSON5.stringify(actual)} but expected ${JSON5.stringify(expected)}`);
 }
 
 interface VisitorCallback {
@@ -120,25 +151,26 @@ interface VisitorError extends ParseError {
 function assertVisit(input: string, expected: VisitorCallback[], expectedErrors: VisitorError[] = [], disallowComments = false): void {
 	let errors: VisitorError[] = [];
 	let actuals: VisitorCallback[] = [];
-	let noArgHalder = (id: keyof JSONVisitor) => (offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter });
-	let oneArgHalder = (id: keyof JSONVisitor) => (arg: any, offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter, arg });
+	let noArgHandler = (id: keyof JSONVisitor) => (offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter });
+	let oneArgHandler = (id: keyof JSONVisitor) => (arg: any, offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter, arg });
 	visit(input, {
-		onObjectBegin: noArgHalder('onObjectBegin'),
-		onObjectProperty: oneArgHalder('onObjectProperty'),
-		onObjectEnd: noArgHalder('onObjectEnd'),
-		onArrayBegin: noArgHalder('onArrayBegin'),
-		onArrayEnd: noArgHalder('onArrayEnd'),
-		onLiteralValue: oneArgHalder('onLiteralValue'),
-		onSeparator: oneArgHalder('onSeparator'),
-		onComment: noArgHalder('onComment'),
+		onObjectBegin: noArgHandler('onObjectBegin'),
+		onObjectProperty: oneArgHandler('onObjectProperty'),
+		onObjectEnd: noArgHandler('onObjectEnd'),
+		onArrayBegin: noArgHandler('onArrayBegin'),
+		onArrayEnd: noArgHandler('onArrayEnd'),
+		onLiteralValue: oneArgHandler('onLiteralValue'),
+		onSeparator: oneArgHandler('onSeparator'),
+		onComment: noArgHandler('onComment'),
 		onError: (error: ParseErrorCode, offset: number, length: number, startLine: number, startCharacter: number) => {
 			errors.push({ error, offset, length, startLine, startCharacter })
 		}
 	}, {
 		disallowComments
 	});
-	assert.deepEqual(errors, expectedErrors);
-	assert.deepEqual(actuals, expected, JSON5.stringify(actuals));
+
+	assert.deepEqual(errors, expectedErrors, `visitor did not get expected errors, was ${printVisitorErrors(errors)} but expected ${printVisitorErrors(expectedErrors)}`);
+	assert.deepEqual(actuals, expected, `visitor did not get expected callbacks, was ${JSON5.stringify(actuals)} but expected ${JSON5.stringify(expected)}`);
 }
 
 function assertNodeAtLocation(input: Node, segments: Segment[], expected: any) {
@@ -154,12 +186,12 @@ function assertNodeAtLocation(input: Node, segments: Segment[], expected: any) {
 
 function assertLocation(input: string, expectedSegments: Segment[], expectedNodeType: string | undefined, expectedCompleteProperty: boolean): void {
 	var offset = input.indexOf('|');
-	input = input.substring(0, offset) + input.substring(offset + 1, input.length);
-	var actual = getLocation(input, offset);
+	const correctedInput = input.substring(0, offset) + input.substring(offset + 1, input.length);
+	var actual = getLocation(correctedInput, offset);
 	assert(actual);
-	assert.deepEqual(actual.path, expectedSegments, input);
-	assert.equal(actual.previousNode && actual.previousNode.type, expectedNodeType, input);
-	assert.equal(actual.isAtPropertyKey, expectedCompleteProperty, input);
+	assert.deepEqual(actual.path, expectedSegments, `path was not correct for \`${input}\`, got ${JSON5.stringify(actual.path)} but expected ${JSON5.stringify(expectedSegments)}`);
+	assert.equal(actual.previousNode && actual.previousNode.type, expectedNodeType, `type was not correct for \`${input}\`, got ${actual.previousNode && actual.previousNode.type} but expected ${expectedNodeType}`);
+	assert.equal(actual.isAtPropertyKey, expectedCompleteProperty, expectedCompleteProperty ? `expected complete property for \`${input}\` but location was not at property key` :  `did not expect complete property for \`${input}\` but location was at property key`);
 }
 
 function assertMatchesLocation(input: string, matchingSegments: Segment[], expectedResult = true): void {
