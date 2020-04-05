@@ -193,7 +193,8 @@ export const enum ParseErrorCode {
 	UnexpectedEndOfNumber = 13,
 	InvalidUnicode = 14,
 	InvalidEscapeCharacter = 15,
-	InvalidCharacter = 16
+	InvalidCharacter = 16,
+	InvalidString = 17
 }
 
 export function printParseErrorCode(code: ParseErrorCode): string {
@@ -214,6 +215,7 @@ export function printParseErrorCode(code: ParseErrorCode): string {
 		case ParseErrorCode.InvalidUnicode: return 'InvalidUnicode';
 		case ParseErrorCode.InvalidEscapeCharacter: return 'InvalidEscapeCharacter';
 		case ParseErrorCode.InvalidCharacter: return 'InvalidCharacter';
+		case ParseErrorCode.InvalidString: return 'InvalidString';
 	}
 }
 
