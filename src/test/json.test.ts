@@ -6,38 +6,73 @@
 
 import * as assert from 'assert';
 import {
-	SyntaxKind, createScanner, parse, getLocation, Node, ParseError, parseTree, ParseErrorCode,
-	ParseOptions, Segment, findNodeAtLocation, getNodeValue, getNodePath, ScanError, Location, visit, JSONVisitor
+	SyntaxKind,
+	createScanner,
+	parse,
+	getLocation,
+	Node,
+	ParseError,
+	parseTree,
+	ParseErrorCode,
+	ParseOptions,
+	Segment,
+	findNodeAtLocation,
+	getNodeValue,
+	getNodePath,
+	ScanError,
+	Location,
+	visit,
+	JSONVisitor,
+	printSyntaxKind,
+	printScanError,
+	printParseErrorCode,
 } from '../main';
 import { truncateSync } from 'fs';
 
-function assertKinds(text: string, ...kinds: SyntaxKind[]): void {
+function assertKinds(text: string, ...kinds: [SyntaxKind, ...SyntaxKind[]]): void {
 	var scanner = createScanner(text);
 	var kind: SyntaxKind;
+	let count = 0;
 	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
-		assert.equal(kind, kinds.shift());
-		assert.equal(scanner.getTokenError(), ScanError.None, text);
+		count++;
+		const expectedKind = kinds.shift();
+		if (expectedKind === undefined) {
+			assert.fail(`extra token found in text \`${text}\`, kind: ${printSyntaxKind(kind)}`)
+		}
+		assert.equal(kind, expectedKind, `kind was not correct for text \`${text}\`, was ${printSyntaxKind(kind)} but expected ${printSyntaxKind(expectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
+		assert.equal(scanner.getTokenError(), ScanError.None, `error ${printScanError(scanner.getTokenError())} while scanning text \`${text}\``);
 	}
-	assert.equal(kinds.length, 0);
+	assert.equal(kinds.length, 0, `not enough tokens found in text \`${text}\`, found ${count} but expected ${count + kinds.length}`);
 }
-function assertScanError(text: string, scanError: ScanError, ...kinds: SyntaxKind[]): void {
+function assertScanError(text: string, scanError: ScanError, ...kinds: [SyntaxKind, ...SyntaxKind[]]): void {
 	var scanner = createScanner(text);
 	scanner.scan();
-	assert.equal(scanner.getToken(), kinds.shift());
-	assert.equal(scanner.getTokenError(), scanError);
+	const firstExpectedKind = kinds[0]; kinds.shift();
+	const firstActualKind = scanner.getToken();
+	assert.equal(firstActualKind, firstExpectedKind, `initial kind was not correct for text \`${text}\`, was ${printSyntaxKind(firstActualKind)} but expected ${printSyntaxKind(firstExpectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
+	const actualError = scanner.getTokenError();
+	assert.equal(actualError, scanError, `error was not correct for text \`${text}\`, was ${printScanError(actualError)} but expected ${printScanError(scanError)}`);
 	var kind: SyntaxKind;
+	let count = 0;
 	while ((kind = scanner.scan()) !== SyntaxKind.EOF) {
-		assert.equal(kind, kinds.shift());
+		const expectedKind = kinds.shift();
+		if (expectedKind === undefined) {
+			assert.fail(`extra token found in text \`${text}\`, kind: ${printSyntaxKind(kind)}`)
+		}
+		assert.equal(kind, expectedKind, `kind was not correct for text \`${text}\`, was ${printSyntaxKind(kind)} but expected ${printSyntaxKind(expectedKind)}, token error: ${printScanError(scanner.getTokenError())}`);
 	}
-	assert.equal(kinds.length, 0);
+	assert.equal(kinds.length, 0, `not enough tokens found in text \`${text}\`, found ${count} but expected ${count + kinds.length}`);
 }
 
 function assertValidParse(input: string, expected: any, options?: ParseOptions): void {
 	var errors: ParseError[] = [];
 	var actual = parse(input, errors, options);
 
-	assert.deepEqual([], errors)
-	assert.deepEqual(actual, expected);
+	const friendlyErrors = errors.map(error => {
+		return { ...error, type: printParseErrorCode(error.error) };
+	});
+	assert.deepEqual(errors, [], `errors occurred when parsing \`${input}\`: ${JSON.stringify(friendlyErrors)}`);
+	assert.deepEqual(actual, expected, `parse result of \`${input}\` was \`${JSON.stringify(actual)}\`, expected \`${JSON.stringify(expected)}\``);
 }
 
 function assertInvalidParse(input: string, expected: any, options?: ParseOptions): void {
@@ -64,7 +99,7 @@ function assertTree(input: string, expected: any, expectedErrors: ParseError[] =
 	};
 	checkParent(actual);
 
-	assert.deepEqual(actual, expected, JSON.stringify(actual));
+	assert.deepEqual(actual, expected, `parse tree was not correct, was \`${JSON.stringify(actual)}\` but expected \`${JSON.stringify(expected)}\``);
 }
 
 interface VisitorCallback {
