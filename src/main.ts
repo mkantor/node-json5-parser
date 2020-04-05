@@ -171,13 +171,6 @@ export const getNodeValue: (node: Node) => any = parser.getNodeValue;
  */
 export const visit: (text: string, visitor: JSONVisitor, options?: ParseOptions) => any = parser.visit;
 
-/**
- * Takes JSON with JavaScript-style comments and remove
- * them. Optionally replaces every none-newline character
- * of comments with a replaceCharacter
- */
-export const stripComments: (text: string, replaceCh?: string) => string = parser.stripComments;
-
 export interface ParseError {
 	error: ParseErrorCode;
 	offset: number;
