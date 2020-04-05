@@ -25,6 +25,18 @@ export const enum ScanError {
 	InvalidCharacter = 6
 }
 
+export function printScanError(code: ScanError): string {
+	switch (code) {
+		case ScanError.None: return 'None';
+		case ScanError.UnexpectedEndOfComment: return 'UnexpectedEndOfComment';
+		case ScanError.UnexpectedEndOfString: return 'UnexpectedEndOfString';
+		case ScanError.UnexpectedEndOfNumber: return 'UnexpectedEndOfNumber';
+		case ScanError.InvalidUnicode: return 'InvalidUnicode';
+		case ScanError.InvalidEscapeCharacter: return 'InvalidEscapeCharacter';
+		case ScanError.InvalidCharacter: return 'InvalidCharacter';
+	}
+}
+
 export const enum SyntaxKind {
 	OpenBraceToken = 1,
 	CloseBraceToken = 2,
@@ -43,6 +55,28 @@ export const enum SyntaxKind {
 	Trivia = 15,
 	Unknown = 16,
 	EOF = 17
+}
+
+export function printSyntaxKind(code: SyntaxKind): string {
+	switch (code) {
+		case SyntaxKind.OpenBraceToken: return 'OpenBraceToken';
+		case SyntaxKind.CloseBraceToken: return 'CloseBraceToken';
+		case SyntaxKind.OpenBracketToken: return 'OpenBracketToken';
+		case SyntaxKind.CloseBracketToken: return 'CloseBracketToken';
+		case SyntaxKind.CommaToken: return 'CommaToken';
+		case SyntaxKind.ColonToken: return 'ColonToken';
+		case SyntaxKind.NullKeyword: return 'NullKeyword';
+		case SyntaxKind.TrueKeyword: return 'TrueKeyword';
+		case SyntaxKind.FalseKeyword: return 'FalseKeyword';
+		case SyntaxKind.StringLiteral: return 'StringLiteral';
+		case SyntaxKind.NumericLiteral: return 'NumericLiteral';
+		case SyntaxKind.LineCommentTrivia: return 'LineCommentTrivia';
+		case SyntaxKind.BlockCommentTrivia: return 'BlockCommentTrivia';
+		case SyntaxKind.LineBreakTrivia: return 'LineBreakTrivia';
+		case SyntaxKind.Trivia: return 'Trivia';
+		case SyntaxKind.Unknown: return 'Unknown';
+		case SyntaxKind.EOF: return 'EOF';
+	}
 }
 
 /**
@@ -165,9 +199,9 @@ export const enum ParseErrorCode {
 	InvalidCharacter = 16
 }
 
-export function printParseErrorCode(code: ParseErrorCode) {
+export function printParseErrorCode(code: ParseErrorCode): string {
 	switch (code) {
-		case ParseErrorCode.InvalidSymbol: return 'InvalidSymbol'
+		case ParseErrorCode.InvalidSymbol: return 'InvalidSymbol';
 		case ParseErrorCode.InvalidNumberFormat: return 'InvalidNumberFormat';
 		case ParseErrorCode.PropertyNameExpected: return 'PropertyNameExpected';
 		case ParseErrorCode.ValueExpected: return 'ValueExpected';
@@ -184,7 +218,6 @@ export function printParseErrorCode(code: ParseErrorCode) {
 		case ParseErrorCode.InvalidEscapeCharacter: return 'InvalidEscapeCharacter';
 		case ParseErrorCode.InvalidCharacter: return 'InvalidCharacter';
 	}
-	return '<unknown ParseErrorCode>';
 }
 
 export type NodeType = 'object' | 'array' | 'property' | 'string' | 'number' | 'boolean' | 'null';
