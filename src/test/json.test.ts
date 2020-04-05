@@ -20,14 +20,12 @@ import {
 	getNodeValue,
 	getNodePath,
 	ScanError,
-	Location,
 	visit,
 	JSONVisitor,
 	printSyntaxKind,
 	printScanError,
 	printParseErrorCode,
 } from '../main';
-import { truncateSync } from 'fs';
 import JSON5 = require('json5');
 
 function printKinds(kinds: SyntaxKind[]): string {
