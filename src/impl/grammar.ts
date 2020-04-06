@@ -7,7 +7,6 @@ export type ScanSuccess = {
 };
 export type ScanFailure = {
 	kind: 'failure';
-	error: Error;
 	consumed: string;
 	syntaxKind: SyntaxKind;
 };
@@ -26,7 +25,6 @@ export function isSuccess(result: ScanResult): result is ScanSuccess {
 export function isFailure(result: ScanResult): result is ScanFailure {
 	return (
 		result.kind === 'failure' &&
-		result.error instanceof Error &&
 		typeof result.consumed === 'string' &&
 		typeof result.syntaxKind === 'number'
 	);
@@ -65,7 +63,6 @@ function literal(text: string): Scanner {
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan literal "${text}" from "${input}"`),
 				consumed: '',
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
@@ -85,7 +82,6 @@ function match(pattern: RegExp): Scanner {
 		} else {
 			return {
 				kind: 'failure',
-				error: new Error(`Unable to scan match ${pattern} from "${input}"`),
 				consumed: '',
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
@@ -197,9 +193,6 @@ function butNot(scanner: Scanner, not: Scanner): Scanner {
 			if (isSuccess(not(input))) {
 				return {
 					kind: 'failure',
-					error: new Error(
-						`Matched ${scanner.name} but also matched ${not.name} with "${input}"`
-					),
 					consumed: result.lexeme,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
@@ -217,7 +210,6 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 			if (isSuccess(notFollowedBy(remainingInput))) {
 				return {
 					kind: 'failure',
-					error: new Error(`Lookahead detected invalid input "${input}"`),
 					consumed: result.lexeme,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
@@ -438,7 +430,6 @@ function sourceCharacter(input: string): ScanResult {
 	} else {
 		return {
 			kind: 'failure',
-			error: new Error(`Unable to scan source character from "${input}"`),
 			consumed: '',
 			syntaxKind: SyntaxKind.Unknown
 		};
