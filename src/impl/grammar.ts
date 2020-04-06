@@ -110,8 +110,36 @@ function combineAnd(first: Scanner, second: Scanner): Scanner {
 	};
 }
 
-/** This function is greedy; if both succeeded, return the longer result. */
+function and(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineAnd);
+}
+
 function combineOr(first: Scanner, second: Scanner): Scanner {
+	return input => {
+		const firstResult = first(input);
+		if (isSuccess(firstResult)) {
+			return firstResult;
+		} else {
+			const secondResult = second(input);
+			if (isSuccess(secondResult)) {
+				return secondResult;
+			} else {
+				// Return the error that covers more input text.
+				if (firstResult.consumed.length > secondResult.consumed.length) {
+					return firstResult;
+				} else {
+					return secondResult;
+				}
+			}
+		}
+	};
+}
+
+function or(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineOr);
+}
+
+function combineLongest(first: Scanner, second: Scanner): Scanner {
 	return input => {
 		const firstResult = first(input);
 		const secondResult = second(input);
@@ -133,22 +161,8 @@ function combineOr(first: Scanner, second: Scanner): Scanner {
 	};
 }
 
-function and(
-	firstScanner: Scanner,
-	...otherScanners: [Scanner, ...Scanner[]]
-): Scanner {
-	return otherScanners.reduce(combineAnd, firstScanner);
-}
-
-/**
- * This function is greedy; if multiple scanners succeed, return the longest
- * result.
- */
-function or(
-	firstScanner: Scanner,
-	...otherScanners: [Scanner, ...Scanner[]]
-): Scanner {
-	return otherScanners.reduce(combineOr, firstScanner);
+function longest(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
+	return scanners.reduce(combineLongest);
 }
 
 function zeroOrMore(scanner: Scanner): Scanner {
@@ -307,7 +321,7 @@ function decimalLiteral(input: string): ScanResult {
 function numericLiteral(input: string): ScanResult {
 	return withSyntaxKind(
 		SyntaxKind.NumericLiteral,
-		or(decimalLiteral, hexIntegerLiteral)
+		or(hexIntegerLiteral, decimalLiteral)
 	)(input);
 }
 
@@ -646,8 +660,8 @@ function identifierPart(input: string): ScanResult {
 function identifierName(input: string): ScanResult {
 	// Note: this doesn't exactly follow the grammar to avoid recursion.
 	return or(
-		identifierStart,
-		and(identifierStart, oneOrMore(identifierPart))
+		and(identifierStart, oneOrMore(identifierPart)),
+		identifierStart
 	)(input);
 }
 
@@ -656,7 +670,7 @@ function identifierName(input: string): ScanResult {
 function json5Identifier(input: string): ScanResult {
 	// Note: this doesn't exactly follow the grammar to get specific kinds for
 	// keywords.
-	return or(
+	return longest(
 		withSyntaxKind(SyntaxKind.Identifier, identifierName),
 		nullLiteral,
 		trueLiteral,
