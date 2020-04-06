@@ -1,12 +1,12 @@
 import { SyntaxKind } from '../main';
 
 export type ScanSuccess = {
-	kind: 'success';
+	success: true;
 	lexeme: string;
 	syntaxKind: SyntaxKind;
 };
 export type ScanFailure = {
-	kind: 'failure';
+	success: false;
 	consumed: string;
 	syntaxKind: SyntaxKind;
 };
@@ -16,7 +16,7 @@ export type Scanner = (input: string) => ScanResult;
 
 export function isSuccess(result: ScanResult): result is ScanSuccess {
 	return (
-		result.kind === 'success' &&
+		result.success &&
 		typeof result.lexeme === 'string' &&
 		typeof result.syntaxKind === 'number'
 	);
@@ -24,7 +24,7 @@ export function isSuccess(result: ScanResult): result is ScanSuccess {
 
 export function isFailure(result: ScanResult): result is ScanFailure {
 	return (
-		result.kind === 'failure' &&
+		!result.success &&
 		typeof result.consumed === 'string' &&
 		typeof result.syntaxKind === 'number'
 	);
@@ -35,7 +35,7 @@ function concatenate(
 	secondResult: ScanSuccess
 ): ScanSuccess {
 	return {
-		kind: 'success',
+		success: true,
 		lexeme: firstResult.lexeme + secondResult.lexeme,
 		syntaxKind:
 			secondResult.lexeme === ''
@@ -56,13 +56,13 @@ function literal(text: string): Scanner {
 	return input => {
 		if (input.startsWith(text)) {
 			return {
-				kind: 'success',
+				success: true,
 				lexeme: text,
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		} else {
 			return {
-				kind: 'failure',
+				success: false,
 				consumed: '',
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
@@ -75,13 +75,13 @@ function match(pattern: RegExp): Scanner {
 		const match = pattern.exec(input);
 		if (match !== null && match.index === 0) {
 			return {
-				kind: 'success',
+				success: true,
 				lexeme: match[0],
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		} else {
 			return {
-				kind: 'failure',
+				success: false,
 				consumed: '',
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
@@ -169,7 +169,7 @@ function zeroOrMore(scanner: Scanner): Scanner {
 	const zeroOrMoreScanner = (input: string): ScanSuccess => {
 		const result = optional(scanner)(input);
 		if (isFailure(result) || (isSuccess(result) && result.lexeme === '')) {
-			return nothing();
+			return emptyResult;
 		} else {
 			const remainingInput = input.substring(result.lexeme.length);
 			return concatenate(result, zeroOrMoreScanner(remainingInput));
@@ -192,7 +192,7 @@ function butNot(scanner: Scanner, not: Scanner): Scanner {
 		if (isSuccess(result)) {
 			if (isSuccess(not(input))) {
 				return {
-					kind: 'failure',
+					success: false,
 					consumed: result.lexeme,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
@@ -209,7 +209,7 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 			const remainingInput = input.substring(result.lexeme.length);
 			if (isSuccess(notFollowedBy(remainingInput))) {
 				return {
-					kind: 'failure',
+					success: false,
 					consumed: result.lexeme,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
@@ -219,12 +219,14 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 	};
 }
 
+const emptyResult: ScanSuccess = {
+	success: true,
+	lexeme: '',
+	syntaxKind: SyntaxKind.Unknown
+};
+
 function nothing(): ScanSuccess {
-	return {
-		kind: 'success',
-		lexeme: '',
-		syntaxKind: SyntaxKind.Unknown
-	};
+	return emptyResult;
 }
 
 // HexDigit :: one of
@@ -423,13 +425,13 @@ function sourceCharacter(input: string): ScanResult {
 	const codePoint = input.codePointAt(0);
 	if (codePoint !== undefined) {
 		return {
-			kind: 'success',
+			success: true,
 			lexeme: String.fromCodePoint(codePoint),
 			syntaxKind: SyntaxKind.Unknown
 		};
 	} else {
 		return {
-			kind: 'failure',
+			success: false,
 			consumed: '',
 			syntaxKind: SyntaxKind.Unknown
 		};
