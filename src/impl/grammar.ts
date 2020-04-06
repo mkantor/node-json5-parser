@@ -128,7 +128,7 @@ function combineOr(first: Scanner, second: Scanner): Scanner {
 				return secondResult;
 			} else {
 				// Return the error that covers more input text.
-				if (firstResult.consumed.length > secondResult.consumed.length) {
+				if (firstResult.consumed.length >= secondResult.consumed.length) {
 					return firstResult;
 				} else {
 					return secondResult;
@@ -147,6 +147,7 @@ function combineLongest(first: Scanner, second: Scanner): Scanner {
 		const firstResult = first(input);
 		const secondResult = second(input);
 		if (isFailure(firstResult) && isFailure(secondResult)) {
+			// Return the error that covers more input text.
 			if (firstResult.consumed >= secondResult.consumed) {
 				return firstResult;
 			} else {
