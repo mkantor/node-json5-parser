@@ -5,13 +5,7 @@
 'use strict';
 
 import { ScanError, SyntaxKind, JSONScanner } from '../main';
-import {
-	ScanResult,
-	isFailure,
-	lineTerminatorSequence,
-	isSuccess,
-	json5InputElement
-} from './grammar';
+import { ScanResult, isFailure, json5InputElement } from './grammar';
 
 /**
  * Creates a JSON scanner on the given text.
@@ -69,30 +63,18 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	};
 
 	function computeNextScanState(text: string, previousState: ScanState, scanResult: ScanResult): ScanState {
-		const consumed = isFailure(scanResult) ? scanResult.consumed : scanResult.lexeme;
-		const pos = previousState.pos + consumed.length;
+		const pos = previousState.pos + scanResult.length;
+		const value = text.substring(previousState.pos, pos);
 
-		// Determine the position of the parsed token.
-		let tokenLineStartOffset = previousState.tokenLineStartOffset;
-		let lineNumber = previousState.lineNumber;
-		let skip = 1;
-		for (let index = 0; index < consumed.length; index += skip) {
-			const lineBreak = lineTerminatorSequence(consumed.slice(index));
-			if (isSuccess(lineBreak)) {
-				skip = lineBreak.lexeme.length;
-				lineNumber++;
-				tokenLineStartOffset = previousState.pos + index + lineBreak.lexeme.length;
-			} else {
-				skip = 1;
-			}
-		}
-
-		const baseState = {
+		const baseState: ScanState = {
 			...previousState,
-			token: scanResult.syntaxKind,
 			pos,
-			lineNumber,
-			tokenLineStartOffset
+			token: scanResult.syntaxKind,
+			lineNumber: previousState.lineNumber + scanResult.lineBreaksCount,
+			tokenLineStartOffset:
+				scanResult.lineBreaksCount > 0
+					? previousState.pos + scanResult.lengthToEndOfLastLineBreak
+					: previousState.tokenLineStartOffset
 		};
 		return isFailure(scanResult)
 			? {
@@ -103,7 +85,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			  }
 			: {
 					...baseState,
-					value: scanResult.lexeme
+					value
 			  };
 	}
 
