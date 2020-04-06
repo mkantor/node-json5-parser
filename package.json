@@ -32,6 +32,7 @@
     "clean": "rimraf lib",
     "watch": "tsc -w -p ./src",
     "test": "npm run compile && mocha",
+    "profile": "npm run compile && NODE_ENV=production node --prof ./lib/umd/benchmark/index.js && echo \"Run this for detailed profiling:\nnode --prof-process $(ls -1 isolate-*.log | tail -n1)\"",
     "preversion": "npm test",
     "postversion": "git push && git push --tags"
   },

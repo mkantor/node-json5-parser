@@ -2,6 +2,7 @@
 build/
 .github/
 lib/**/test/
+lib/**/benchmark/
 lib/**/*.map
 lib/*/*/*.d.ts
 src/
