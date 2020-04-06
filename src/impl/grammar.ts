@@ -2,12 +2,12 @@ import { SyntaxKind } from '../main';
 
 export type ScanSuccess = {
 	success: true;
-	lexeme: string;
+	length: number;
 	syntaxKind: SyntaxKind;
 };
 export type ScanFailure = {
 	success: false;
-	consumed: string;
+	length: number;
 	syntaxKind: SyntaxKind;
 };
 export type ScanResult = ScanSuccess | ScanFailure;
@@ -17,7 +17,7 @@ export type Scanner = (input: string) => ScanResult;
 export function isSuccess(result: ScanResult): result is ScanSuccess {
 	return (
 		result.success &&
-		typeof result.lexeme === 'string' &&
+		typeof result.length === 'number' &&
 		typeof result.syntaxKind === 'number'
 	);
 }
@@ -25,7 +25,7 @@ export function isSuccess(result: ScanResult): result is ScanSuccess {
 export function isFailure(result: ScanResult): result is ScanFailure {
 	return (
 		!result.success &&
-		typeof result.consumed === 'string' &&
+		typeof result.length === 'number' &&
 		typeof result.syntaxKind === 'number'
 	);
 }
@@ -36,11 +36,11 @@ function concatenate(
 ): ScanSuccess {
 	return {
 		success: true,
-		lexeme: firstResult.lexeme + secondResult.lexeme,
+		length: firstResult.length + secondResult.length,
 		syntaxKind:
-			secondResult.lexeme === ''
+			secondResult.length === 0
 				? firstResult.syntaxKind
-				: firstResult.lexeme === ''
+				: firstResult.length === 0
 				? secondResult.syntaxKind
 				: SyntaxKind.Unknown
 	};
@@ -57,13 +57,13 @@ function literal(text: string): Scanner {
 		if (input.startsWith(text)) {
 			return {
 				success: true,
-				lexeme: text,
+				length: text.length,
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		} else {
 			return {
 				success: false,
-				consumed: '',
+				length: 0,
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		}
@@ -76,13 +76,13 @@ function match(pattern: RegExp): Scanner {
 		if (match !== null && match.index === 0) {
 			return {
 				success: true,
-				lexeme: match[0],
+				length: match[0].length,
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		} else {
 			return {
 				success: false,
-				consumed: '',
+				length: 0,
 				syntaxKind: SyntaxKind.Unknown
 			} as const;
 		}
@@ -96,12 +96,12 @@ function combineAnd(first: Scanner, second: Scanner): Scanner {
 			return firstResult;
 		}
 
-		const remainingInput = input.substring(firstResult.lexeme.length);
+		const remainingInput = input.substring(firstResult.length);
 		const secondResult = second(remainingInput);
 		if (isFailure(secondResult)) {
 			return {
 				...secondResult,
-				consumed: firstResult.lexeme + secondResult.consumed
+				length: firstResult.length + secondResult.length
 			};
 		}
 
@@ -124,7 +124,7 @@ function combineOr(first: Scanner, second: Scanner): Scanner {
 				return secondResult;
 			} else {
 				// Return the error that covers more input text.
-				if (firstResult.consumed.length >= secondResult.consumed.length) {
+				if (firstResult.length >= secondResult.length) {
 					return firstResult;
 				} else {
 					return secondResult;
@@ -144,7 +144,7 @@ function combineLongest(first: Scanner, second: Scanner): Scanner {
 		const secondResult = second(input);
 		if (isFailure(firstResult) && isFailure(secondResult)) {
 			// Return the error that covers more input text.
-			if (firstResult.consumed >= secondResult.consumed) {
+			if (firstResult.length >= secondResult.length) {
 				return firstResult;
 			} else {
 				return secondResult;
@@ -153,7 +153,7 @@ function combineLongest(first: Scanner, second: Scanner): Scanner {
 			return firstResult;
 		} else if (isFailure(firstResult)) {
 			return secondResult;
-		} else if (firstResult.lexeme.length > secondResult.lexeme.length) {
+		} else if (firstResult.length > secondResult.length) {
 			return firstResult;
 		} else {
 			return secondResult;
@@ -168,10 +168,10 @@ function longest(...scanners: [Scanner, Scanner, ...Scanner[]]): Scanner {
 function zeroOrMore(scanner: Scanner): Scanner {
 	const zeroOrMoreScanner = (input: string): ScanSuccess => {
 		const result = optional(scanner)(input);
-		if (isFailure(result) || (isSuccess(result) && result.lexeme === '')) {
+		if (isFailure(result) || (isSuccess(result) && result.length === 0)) {
 			return emptyResult;
 		} else {
-			const remainingInput = input.substring(result.lexeme.length);
+			const remainingInput = input.substring(result.length);
 			return concatenate(result, zeroOrMoreScanner(remainingInput));
 		}
 	};
@@ -193,7 +193,7 @@ function butNot(scanner: Scanner, not: Scanner): Scanner {
 			if (isSuccess(not(input))) {
 				return {
 					success: false,
-					consumed: result.lexeme,
+					length: result.length,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			}
@@ -206,11 +206,11 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 	return input => {
 		const result = scanner(input);
 		if (isSuccess(result)) {
-			const remainingInput = input.substring(result.lexeme.length);
+			const remainingInput = input.substring(result.length);
 			if (isSuccess(notFollowedBy(remainingInput))) {
 				return {
 					success: false,
-					consumed: result.lexeme,
+					length: result.length,
 					syntaxKind: SyntaxKind.Unknown
 				} as const;
 			}
@@ -221,7 +221,7 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 
 const emptyResult: ScanSuccess = {
 	success: true,
-	lexeme: '',
+	length: 0,
 	syntaxKind: SyntaxKind.Unknown
 };
 
@@ -426,13 +426,13 @@ function sourceCharacter(input: string): ScanResult {
 	if (codePoint !== undefined) {
 		return {
 			success: true,
-			lexeme: String.fromCodePoint(codePoint),
+			length: String.fromCodePoint(codePoint).length,
 			syntaxKind: SyntaxKind.Unknown
 		};
 	} else {
 		return {
 			success: false,
-			consumed: '',
+			length: 0,
 			syntaxKind: SyntaxKind.Unknown
 		};
 	}

@@ -70,19 +70,19 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 	};
 
 	function computeNextScanState(text: string, previousState: ScanState, scanResult: ScanResult): ScanState {
-		const consumed = isFailure(scanResult) ? scanResult.consumed : scanResult.lexeme;
-		const pos = previousState.pos + consumed.length;
+		const pos = previousState.pos + scanResult.length;
+		const value = text.substring(previousState.pos, pos);
 
 		// Determine the position of the parsed token.
 		let tokenLineStartOffset = previousState.tokenLineStartOffset;
 		let lineNumber = previousState.lineNumber;
 		let skip = 1;
-		for (let index = 0; index < consumed.length; index += skip) {
-			const lineBreak = lineTerminatorSequence(consumed.slice(index));
+		for (let index = 0; index < scanResult.length; index += skip) {
+			const lineBreak = lineTerminatorSequence(value.slice(index));
 			if (isSuccess(lineBreak)) {
-				skip = lineBreak.lexeme.length;
+				skip = lineBreak.length;
 				lineNumber++;
-				tokenLineStartOffset = previousState.pos + index + lineBreak.lexeme.length;
+				tokenLineStartOffset = previousState.pos + index + lineBreak.length;
 			} else {
 				skip = 1;
 			}
@@ -104,7 +104,7 @@ export function createScanner(text: string, ignoreTrivia: boolean = false): JSON
 			  }
 			: {
 					...baseState,
-					value: scanResult.lexeme
+					value,
 			  };
 	}
 
