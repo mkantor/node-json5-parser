@@ -32,7 +32,10 @@ export function isFailure(result: ScanResult): result is ScanFailure {
 	);
 }
 
-function concatenate(firstResult: ScanSuccess, secondResult: ScanSuccess): ScanSuccess {
+function concatenate(
+	firstResult: ScanSuccess,
+	secondResult: ScanSuccess
+): ScanSuccess {
 	return {
 		kind: 'success',
 		lexeme: firstResult.lexeme + secondResult.lexeme,
@@ -608,15 +611,15 @@ function unicodeDigit(input: string): ScanResult {
 }
 
 // UnicodeCombiningMark ::
-// 	any character in the Unicode categories "Non-spacing mark (Mn)" or 
+// 	any character in the Unicode categories "Non-spacing mark (Mn)" or
 // 		"Combining spacing mark (Mc)"
 function unicodeCombiningMark(input: string): ScanResult {
 	return match(/^\p{Mn}|^\p{Mc}/u)(input);
 }
 
 // UnicodeLetter ::
-// 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase 
-//		letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other 
+// 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase
+//		letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other
 //		letter (Lo)", or "Letter number (Nl)".
 function unicodeLetter(input: string): ScanResult {
 	return match(/^\p{Lu}|^\p{Ll}|^\p{Lt}|^\p{Lm}|^\p{Lo}|^\p{Nl}/u)(input);
