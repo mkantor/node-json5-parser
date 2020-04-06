@@ -448,29 +448,7 @@ function sourceCharacter(input: string): ScanResult {
 // NonEscapeCharacter ::
 // 	SourceCharacter but not one of EscapeCharacter or LineTerminator
 function nonEscapeCharacter(input: string): ScanResult {
-	const result = sourceCharacter(input);
-	if (isSuccess(result)) {
-		if (isSuccess(escapeCharacter(input))) {
-			return {
-				kind: 'failure',
-				error: new Error(
-					`Scanned escape character when trying to scan non-escape character from "${input}"`
-				),
-				consumed: '',
-				syntaxKind: SyntaxKind.Unknown
-			};
-		} else if (isSuccess(lineTerminator(input))) {
-			return {
-				kind: 'failure',
-				error: new Error(
-					`Scanned line terminator when trying to scan non-escape character from "${input}"`
-				),
-				consumed: '',
-				syntaxKind: SyntaxKind.Unknown
-			};
-		}
-	}
-	return result;
+	return butNot(sourceCharacter, or(escapeCharacter, lineTerminator))(input);
 }
 
 // CharacterEscapeSequence ::
