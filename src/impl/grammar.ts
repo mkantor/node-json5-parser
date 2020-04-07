@@ -16,7 +16,7 @@ export type ScanFailure = {
 };
 export type ScanResult = ScanSuccess | ScanFailure;
 
-export type Scanner = (input: string) => ScanResult;
+type Scanner = (input: string) => ScanResult;
 
 export function isSuccess(result: ScanResult): result is ScanSuccess {
 	return (
@@ -33,6 +33,24 @@ export function isFailure(result: ScanResult): result is ScanFailure {
 		typeof result.syntaxKind === 'number'
 	);
 }
+
+const emptyFailure: ScanFailure = {
+	success: false,
+	length: 0,
+	lineBreaksCount: 0,
+	lengthToEndOfLastLineBreak: 0,
+	syntaxKind: SyntaxKind.Unknown
+};
+
+const emptySuccess: ScanSuccess = {
+	success: true,
+	length: 0,
+	lineBreaksCount: 0,
+	lengthToEndOfLastLineBreak: 0,
+	syntaxKind: SyntaxKind.Unknown
+};
+
+const nothing: Scanner = () => emptySuccess;
 
 function concatenate(
 	firstResult: ScanSuccess,
@@ -70,7 +88,7 @@ function literal(text: string): Scanner {
 				lineBreaksCount: 0,
 				lengthToEndOfLastLineBreak: 0,
 				syntaxKind: SyntaxKind.Unknown
-			} as const;
+			};
 		} else {
 			return emptyFailure;
 		}
@@ -86,7 +104,7 @@ function literalLineBreak(text: string): Scanner {
 				lineBreaksCount: 1,
 				lengthToEndOfLastLineBreak: text.length,
 				syntaxKind: SyntaxKind.Unknown
-			} as const;
+			};
 		} else {
 			return emptyFailure;
 		}
@@ -103,7 +121,7 @@ function match(pattern: RegExp): Scanner {
 				lineBreaksCount: 0,
 				lengthToEndOfLastLineBreak: 0,
 				syntaxKind: SyntaxKind.Unknown
-			} as const;
+			};
 		} else {
 			return emptyFailure;
 		}
@@ -218,7 +236,7 @@ function butNot(scanner: Scanner, not: Scanner): Scanner {
 					lineBreaksCount: result.lineBreaksCount,
 					lengthToEndOfLastLineBreak: result.lengthToEndOfLastLineBreak,
 					syntaxKind: SyntaxKind.Unknown
-				} as const;
+				};
 			}
 		}
 		return result;
@@ -237,231 +255,207 @@ function lookaheadNot(scanner: Scanner, notFollowedBy: Scanner): Scanner {
 					lineBreaksCount: result.lineBreaksCount,
 					lengthToEndOfLastLineBreak: result.lengthToEndOfLastLineBreak,
 					syntaxKind: SyntaxKind.Unknown
-				} as const;
+				};
 			}
 		}
 		return result;
 	};
 }
 
-const emptyFailure: ScanFailure = {
-	success: false,
-	length: 0,
-	lineBreaksCount: 0,
-	lengthToEndOfLastLineBreak: 0,
-	syntaxKind: SyntaxKind.Unknown
-};
-
-const emptySuccess: ScanSuccess = {
-	success: true,
-	length: 0,
-	lineBreaksCount: 0,
-	lengthToEndOfLastLineBreak: 0,
-	syntaxKind: SyntaxKind.Unknown
-};
-
-function nothing(): ScanSuccess {
-	return emptySuccess;
-}
+/** Actual JSON5 grammar starts here. See <https://spec.json5.org/>. */
 
 // HexDigit :: one of
 // 	0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F
-function hexDigit(input: string): ScanResult {
-	return match(/^[0-9a-fA-F]/)(input);
-}
+const hexDigit: Scanner = match(/^[0-9a-fA-F]/);
 
 // DecimalDigit :: one of
 // 	0 1 2 3 4 5 6 7 8 9
-function decimalDigit(input: string): ScanResult {
-	return match(/^[0-9]/)(input);
-}
+const decimalDigit: Scanner = match(/^[0-9]/);
 
 // NonZeroDigit :: one of
 // 	1 2 3 4 5 6 7 8 9
-function nonZeroDigit(input: string): ScanResult {
-	return match(/^[1-9]/)(input);
-}
+const nonZeroDigit: Scanner = match(/^[1-9]/);
 
 // ExponentIndicator :: one of
 // 	e E
-function exponentIndicator(input: string): ScanResult {
-	return or(literal('e'), literal('E'))(input);
-}
+const exponentIndicator: Scanner = or(literal('e'), literal('E'));
 
 // HexIntegerLiteral ::
 // 	0x HexDigit
 // 	0X HexDigit
 // 	HexIntegerLiteral HexDigit
-function hexIntegerLiteral(input: string): ScanResult {
-	return or(
-		and(literal('0x'), oneOrMore(hexDigit)),
-		and(literal('0X'), oneOrMore(hexDigit))
-	)(input);
-}
+const hexIntegerLiteral: Scanner = or(
+	and(literal('0x'), oneOrMore(hexDigit)),
+	and(literal('0X'), oneOrMore(hexDigit))
+);
 
 // DecimalDigits ::
 // 	DecimalDigit
 // 	DecimalDigits DecimalDigit
-function decimalDigits(input: string): ScanResult {
-	return oneOrMore(decimalDigit)(input);
-}
+const decimalDigits: Scanner = oneOrMore(decimalDigit);
 
 // SignedInteger ::
 // 	DecimalDigits
 // 	+ DecimalDigits
 // 	- DecimalDigits
-function signedInteger(input: string): ScanResult {
-	return or(
-		decimalDigits,
-		and(literal('+'), decimalDigits),
-		and(literal('-'), decimalDigits)
-	)(input);
-}
+const signedInteger: Scanner = or(
+	decimalDigits,
+	and(literal('+'), decimalDigits),
+	and(literal('-'), decimalDigits)
+);
 
 // ExponentPart ::
 // 	ExponentIndicator SignedInteger
-function exponentPart(input: string): ScanResult {
-	return and(exponentIndicator, signedInteger)(input);
-}
+const exponentPart: Scanner = and(exponentIndicator, signedInteger);
 
 // DecimalIntegerLiteral ::
 // 	0
 // 	NonZeroDigit DecimalDigits(opt)
-function decimalIntegerLiteral(input: string): ScanResult {
-	return or(literal('0'), and(nonZeroDigit, optional(decimalDigits)))(input);
-}
+const decimalIntegerLiteral: Scanner = or(
+	literal('0'),
+	and(nonZeroDigit, optional(decimalDigits))
+);
 
 // DecimalLiteral ::
 // 	DecimalIntegerLiteral . DecimalDigits(opt) ExponentPart(opt)
 // 	. DecimalDigits ExponentPart(opt)
 // 	DecimalIntegerLiteral ExponentPart(opt)
-function decimalLiteral(input: string): ScanResult {
-	return or(
-		and(
-			decimalIntegerLiteral,
-			literal('.'),
-			optional(decimalDigits),
-			optional(exponentPart)
-		),
-		and(literal('.'), decimalDigits, optional(exponentPart)),
-		and(decimalIntegerLiteral, optional(exponentPart))
-	)(input);
-}
+const decimalLiteral: Scanner = or(
+	and(
+		decimalIntegerLiteral,
+		literal('.'),
+		optional(decimalDigits),
+		optional(exponentPart)
+	),
+	and(literal('.'), decimalDigits, optional(exponentPart)),
+	and(decimalIntegerLiteral, optional(exponentPart))
+);
 
 // NumericLiteral ::
 // 	DecimalLiteral
 // 	HexIntegerLiteral
-function numericLiteral(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.NumericLiteral,
-		or(hexIntegerLiteral, decimalLiteral)
-	)(input);
-}
+const numericLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.NumericLiteral,
+	or(hexIntegerLiteral, decimalLiteral)
+);
 
 // Infinity
-function infinityLiteral(input: string): ScanResult {
-	return withSyntaxKind(SyntaxKind.InfinityKeyword, literal('Infinity'))(input);
-}
+const infinityLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.InfinityKeyword,
+	literal('Infinity')
+);
 
 // NaN
-function nanLiteral(input: string): ScanResult {
-	return withSyntaxKind(SyntaxKind.NaNKeyword, literal('NaN'))(input);
-}
+const nanLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.NaNKeyword,
+	literal('NaN')
+);
 
 // JSON5NumericLiteral::
 // 	NumericLiteral
 // 	Infinity
 // 	NaN
-function json5NumericLiteral(input: string): ScanResult {
-	return or(numericLiteral, infinityLiteral, nanLiteral)(input);
-}
+const json5NumericLiteral: Scanner = or(
+	numericLiteral,
+	infinityLiteral,
+	nanLiteral
+);
 
 // JSON5Number::
 // 	JSON5NumericLiteral
 // 	+ JSON5NumericLiteral
 // 	- JSON5NumericLiteral
-function json5Number(input: string): ScanResult {
-	return or(
-		json5NumericLiteral,
-		withSyntaxKind(
-			SyntaxKind.NumericLiteral,
-			and(literal('+'), json5NumericLiteral)
-		),
-		withSyntaxKind(
-			SyntaxKind.NumericLiteral,
-			and(literal('-'), json5NumericLiteral)
-		)
-	)(input);
-}
+const json5Number: Scanner = or(
+	json5NumericLiteral,
+	withSyntaxKind(
+		SyntaxKind.NumericLiteral,
+		and(literal('+'), json5NumericLiteral)
+	),
+	withSyntaxKind(
+		SyntaxKind.NumericLiteral,
+		and(literal('-'), json5NumericLiteral)
+	)
+);
 
 // LineTerminator ::
 // 	<LF>
 // 	<CR>
 // 	<LS>
 // 	<PS>
-function lineTerminator(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.LineBreakTrivia,
-		or(
-			literalLineBreak('\n'),
-			literalLineBreak('\r'),
-			literalLineBreak('\u2028'),
-			literalLineBreak('\u2029')
-		)
-	)(input);
-}
+const lineTerminator: Scanner = withSyntaxKind(
+	SyntaxKind.LineBreakTrivia,
+	or(
+		literalLineBreak('\n'),
+		literalLineBreak('\r'),
+		literalLineBreak('\u2028'),
+		literalLineBreak('\u2029')
+	)
+);
+
+// LineTerminatorSequence ::
+// 	<LF>
+// 	<CR> [lookahead ∉ <LF> ]
+// 	<LS>
+// 	<PS>
+// 	<CR> <LF>
+const lineTerminatorSequence: Scanner = withSyntaxKind(
+	SyntaxKind.LineBreakTrivia,
+	or(
+		literalLineBreak('\n'),
+		lookaheadNot(literalLineBreak('\r'), literalLineBreak('\n')),
+		literalLineBreak('\u2028'),
+		literalLineBreak('\u2029'),
+		literalLineBreak('\r\n')
+	)
+);
 
 // LineContinuation ::
 // 	\ LineTerminatorSequence
-function lineContinuation(input: string): ScanResult {
-	return and(literal('\\'), lineTerminatorSequence)(input);
-}
+const lineContinuation: Scanner = and(literal('\\'), lineTerminatorSequence);
 
 // HexEscapeSequence ::
 // 	x HexDigit HexDigit
-function hexEscapeSequence(input: string): ScanResult {
-	return and(literal('x'), hexDigit, hexDigit)(input);
-}
+const hexEscapeSequence: Scanner = and(literal('x'), hexDigit, hexDigit);
 
 // UnicodeEscapeSequence ::
 // 	u HexDigit HexDigit HexDigit HexDigit
-function unicodeEscapeSequence(input: string): ScanResult {
-	return and(literal('u'), hexDigit, hexDigit, hexDigit, hexDigit)(input);
-}
+const unicodeEscapeSequence: Scanner = and(
+	literal('u'),
+	hexDigit,
+	hexDigit,
+	hexDigit,
+	hexDigit
+);
+
+// SingleEscapeCharacter :: one of
+// 	' " \ b f n r t v
+const singleEscapeCharacter: Scanner = or(
+	literal("'"),
+	literal('"'),
+	literal('\\'),
+	literal('b'),
+	literal('f'),
+	literal('n'),
+	literal('r'),
+	literal('t'),
+	literal('v')
+);
 
 // EscapeCharacter ::
 // 	SingleEscapeCharacter
 // 	DecimalDigit
 // 	x
 // 	u
-function escapeCharacter(input: string): ScanResult {
-	return or(
-		singleEscapeCharacter,
-		decimalDigit,
-		literal('x'),
-		literal('u')
-	)(input);
-}
-
-// SingleEscapeCharacter :: one of
-// 	' " \ b f n r t v
-function singleEscapeCharacter(input: string): ScanResult {
-	return or(
-		literal("'"),
-		literal('"'),
-		literal('\\'),
-		literal('b'),
-		literal('f'),
-		literal('n'),
-		literal('r'),
-		literal('t'),
-		literal('v')
-	)(input);
-}
+const escapeCharacter: Scanner = or(
+	singleEscapeCharacter,
+	decimalDigit,
+	literal('x'),
+	literal('u')
+);
 
 // SourceCharacter ::
 // 	any Unicode code unit
-function sourceCharacter(input: string): ScanResult {
+const sourceCharacter: Scanner = input => {
 	const codePoint = input.codePointAt(0);
 	if (codePoint !== undefined) {
 		return {
@@ -480,34 +474,34 @@ function sourceCharacter(input: string): ScanResult {
 			syntaxKind: SyntaxKind.Unknown
 		};
 	}
-}
+};
 
 // NonEscapeCharacter ::
 // 	SourceCharacter but not one of EscapeCharacter or LineTerminator
-function nonEscapeCharacter(input: string): ScanResult {
-	return butNot(sourceCharacter, or(escapeCharacter, lineTerminator))(input);
-}
+const nonEscapeCharacter: Scanner = butNot(
+	sourceCharacter,
+	or(escapeCharacter, lineTerminator)
+);
 
 // CharacterEscapeSequence ::
 // 	SingleEscapeCharacter
 // 	NonEscapeCharacter
-function characterEscapeSequence(input: string): ScanResult {
-	return or(singleEscapeCharacter, nonEscapeCharacter)(input);
-}
+const characterEscapeSequence: Scanner = or(
+	singleEscapeCharacter,
+	nonEscapeCharacter
+);
 
 // EscapeSequence ::
 // 	CharacterEscapeSequence
 // 	0 [lookahead ∉ DecimalDigit]
 // 	HexEscapeSequence
 // 	UnicodeEscapeSequence
-function escapeSequence(input: string): ScanResult {
-	return or(
-		characterEscapeSequence,
-		lookaheadNot(literal('0'), decimalDigit),
-		hexEscapeSequence,
-		unicodeEscapeSequence
-	)(input);
-}
+const escapeSequence: Scanner = or(
+	characterEscapeSequence,
+	lookaheadNot(literal('0'), decimalDigit),
+	hexEscapeSequence,
+	unicodeEscapeSequence
+);
 
 // JSON5SingleStringCharacter::
 // 	SourceCharacter but not one of ' or \ or LineTerminator
@@ -515,15 +509,13 @@ function escapeSequence(input: string): ScanResult {
 // 	LineContinuation
 // 	U+2028
 // 	U+2029
-function json5SingleStringCharacter(input: string): ScanResult {
-	return or(
-		butNot(sourceCharacter, or(literal("'"), literal('\\'), lineTerminator)),
-		and(literal('\\'), escapeSequence),
-		lineContinuation,
-		literal('\u2028'),
-		literal('\u2029')
-	)(input);
-}
+const json5SingleStringCharacter: Scanner = or(
+	butNot(sourceCharacter, or(literal("'"), literal('\\'), lineTerminator)),
+	and(literal('\\'), escapeSequence),
+	lineContinuation,
+	literal('\u2028'),
+	literal('\u2029')
+);
 
 // JSON5DoubleStringCharacter::
 // 	SourceCharacter but not one of " or \ or LineTerminator
@@ -531,129 +523,112 @@ function json5SingleStringCharacter(input: string): ScanResult {
 // 	LineContinuation
 // 	U+2028
 // 	U+2029
-function json5DoubleStringCharacter(input: string): ScanResult {
-	return or(
-		butNot(sourceCharacter, or(literal('"'), literal('\\'), lineTerminator)),
-		and(literal('\\'), escapeSequence),
-		lineContinuation,
-		literal('\u2028'),
-		literal('\u2029')
-	)(input);
-}
+const json5DoubleStringCharacter: Scanner = or(
+	butNot(sourceCharacter, or(literal('"'), literal('\\'), lineTerminator)),
+	and(literal('\\'), escapeSequence),
+	lineContinuation,
+	literal('\u2028'),
+	literal('\u2029')
+);
 
 // JSON5SingleStringCharacters::
 // 	JSON5SingleStringCharacter JSON5SingleStringCharacters(opt)
-function json5SingleStringCharacters(input: string): ScanResult {
-	return oneOrMore(json5SingleStringCharacter)(input);
-}
+const json5SingleStringCharacters: Scanner = oneOrMore(
+	json5SingleStringCharacter
+);
 
 // JSON5DoubleStringCharacters::
 // 	JSON5DoubleStringCharacter JSON5DoubleStringCharacters(opt)
-function json5DoubleStringCharacters(input: string): ScanResult {
-	return oneOrMore(json5DoubleStringCharacter)(input);
-}
+const json5DoubleStringCharacters: Scanner = oneOrMore(
+	json5DoubleStringCharacter
+);
 
 // JSON5String::
 // 	"JSON5DoubleStringCharacters(opt)"
 // 	'JSON5SingleStringCharacters(opt)'
-function json5String(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.StringLiteral,
-		or(
-			and(literal('"'), zeroOrMore(json5DoubleStringCharacters), literal('"')),
-			and(literal("'"), zeroOrMore(json5SingleStringCharacters), literal("'"))
-		)
-	)(input);
-}
+const json5String: Scanner = withSyntaxKind(
+	SyntaxKind.StringLiteral,
+	or(
+		and(literal('"'), zeroOrMore(json5DoubleStringCharacters), literal('"')),
+		and(literal("'"), zeroOrMore(json5SingleStringCharacters), literal("'"))
+	)
+);
 
 // true
-function trueLiteral(input: string): ScanResult {
-	return withSyntaxKind(SyntaxKind.TrueKeyword, literal('true'))(input);
-}
+const trueLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.TrueKeyword,
+	literal('true')
+);
 
 // false
-function falseLiteral(input: string): ScanResult {
-	return withSyntaxKind(SyntaxKind.FalseKeyword, literal('false'))(input);
-}
+const falseLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.FalseKeyword,
+	literal('false')
+);
 
 // BooleanLiteral ::
 // 	true
 // 	false
-function booleanLiteral(input: string): ScanResult {
-	return or(trueLiteral, falseLiteral)(input);
-}
+const booleanLiteral: Scanner = or(trueLiteral, falseLiteral);
 
 // JSON5Boolean ::
 // 	BooleanLiteral
-function json5Boolean(input: string): ScanResult {
-	return booleanLiteral(input);
-}
+const json5Boolean: Scanner = booleanLiteral;
 
 // NullLiteral ::
 // 	null
-function nullLiteral(input: string): ScanResult {
-	return withSyntaxKind(SyntaxKind.NullKeyword, literal('null'))(input);
-}
+const nullLiteral: Scanner = withSyntaxKind(
+	SyntaxKind.NullKeyword,
+	literal('null')
+);
 
 // JSON5Null ::
 //	NullLiteral
-function json5Null(input: string): ScanResult {
-	return nullLiteral(input);
-}
+const json5Null: Scanner = nullLiteral;
 
 // JSON5Punctuator :: one of
 //	{ } [ ] : ,
-function json5Punctuator(input: string): ScanResult {
-	return or(
-		withSyntaxKind(SyntaxKind.OpenBraceToken, literal('{')),
-		withSyntaxKind(SyntaxKind.CloseBraceToken, literal('}')),
-		withSyntaxKind(SyntaxKind.OpenBracketToken, literal('[')),
-		withSyntaxKind(SyntaxKind.CloseBracketToken, literal(']')),
-		withSyntaxKind(SyntaxKind.ColonToken, literal(':')),
-		withSyntaxKind(SyntaxKind.CommaToken, literal(','))
-	)(input);
-}
+const json5Punctuator: Scanner = or(
+	withSyntaxKind(SyntaxKind.OpenBraceToken, literal('{')),
+	withSyntaxKind(SyntaxKind.CloseBraceToken, literal('}')),
+	withSyntaxKind(SyntaxKind.OpenBracketToken, literal('[')),
+	withSyntaxKind(SyntaxKind.CloseBracketToken, literal(']')),
+	withSyntaxKind(SyntaxKind.ColonToken, literal(':')),
+	withSyntaxKind(SyntaxKind.CommaToken, literal(','))
+);
 
 // UnicodeConnectorPunctuation ::
 // 	any character in the Unicode category "Connector punctuation (Pc)"
-function unicodeConnectorPunctuation(input: string): ScanResult {
-	return match(/^\p{Pc}/u)(input);
-}
+const unicodeConnectorPunctuation: Scanner = match(/^\p{Pc}/u);
 
 // UnicodeDigit ::
 // 	any character in the Unicode category "Decimal number (Nd)"
-function unicodeDigit(input: string): ScanResult {
-	return match(/^\p{Nd}/u)(input);
-}
+const unicodeDigit: Scanner = match(/^\p{Nd}/u);
 
 // UnicodeCombiningMark ::
 // 	any character in the Unicode categories "Non-spacing mark (Mn)" or
 // 		"Combining spacing mark (Mc)"
-function unicodeCombiningMark(input: string): ScanResult {
-	return match(/^\p{Mn}|^\p{Mc}/u)(input);
-}
+const unicodeCombiningMark: Scanner = match(/^\p{Mn}|^\p{Mc}/u);
 
 // UnicodeLetter ::
 // 	any character in the Unicode categories "Uppercase letter (Lu)", "Lowercase
 //		letter (Ll)", "Titlecase letter (Lt)", "Modifier letter (Lm)", "Other
 //		letter (Lo)", or "Letter number (Nl)".
-function unicodeLetter(input: string): ScanResult {
-	return match(/^\p{Lu}|^\p{Ll}|^\p{Lt}|^\p{Lm}|^\p{Lo}|^\p{Nl}/u)(input);
-}
+const unicodeLetter: Scanner = match(
+	/^\p{Lu}|^\p{Ll}|^\p{Lt}|^\p{Lm}|^\p{Lo}|^\p{Nl}/u
+);
 
 // IdentifierStart ::
 // 	UnicodeLetter
 // 	$
 // 	_
 // 	\ UnicodeEscapeSequence
-function identifierStart(input: string): ScanResult {
-	return or(
-		unicodeLetter,
-		literal('$'),
-		literal('_'),
-		and(literal('\\'), unicodeEscapeSequence)
-	)(input);
-}
+const identifierStart: Scanner = or(
+	unicodeLetter,
+	literal('$'),
+	literal('_'),
+	and(literal('\\'), unicodeEscapeSequence)
+);
 
 // IdentifierPart ::
 // 	IdentifierStart
@@ -662,134 +637,109 @@ function identifierStart(input: string): ScanResult {
 // 	UnicodeConnectorPunctuation
 // 	<ZWNJ>
 // 	<ZWJ>
-function identifierPart(input: string): ScanResult {
-	return or(
-		identifierStart,
-		unicodeCombiningMark,
-		unicodeDigit,
-		unicodeConnectorPunctuation,
-		literal('\u200C'),
-		literal('\u200D')
-	)(input);
-}
+const identifierPart: Scanner = or(
+	identifierStart,
+	unicodeCombiningMark,
+	unicodeDigit,
+	unicodeConnectorPunctuation,
+	literal('\u200C'),
+	literal('\u200D')
+);
 
 // IdentifierName ::
 // 	IdentifierStart
 // 	IdentifierName IdentifierPart
-function identifierName(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar to avoid recursion.
-	return or(
-		and(identifierStart, oneOrMore(identifierPart)),
-		identifierStart
-	)(input);
-}
+//
+// Note: this doesn't exactly follow the grammar to avoid recursion.
+const identifierName: Scanner = or(
+	and(identifierStart, oneOrMore(identifierPart)),
+	identifierStart
+);
 
 // JSON5Identifier ::
 //	IdentifierName
-function json5Identifier(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar to get specific kinds for
-	// keywords.
-	return longest(
-		withSyntaxKind(SyntaxKind.Identifier, identifierName),
-		nullLiteral,
-		trueLiteral,
-		falseLiteral,
-		infinityLiteral,
-		nanLiteral
-	)(input);
-}
+//
+// Note: this doesn't exactly follow the grammar to get specific kinds for
+// keywords.
+const json5Identifier: Scanner = longest(
+	withSyntaxKind(SyntaxKind.Identifier, identifierName),
+	nullLiteral,
+	trueLiteral,
+	falseLiteral,
+	infinityLiteral,
+	nanLiteral
+);
 
 // JSON5Token ::
 // 	JSON5Identifier
 // 	JSON5Punctuator
 // 	JSON5String
 // 	JSON5Number
-function json5Token(input: string): ScanResult {
-	return or(json5Identifier, json5Punctuator, json5String, json5Number)(input);
-}
+const json5Token: Scanner = or(
+	json5Identifier,
+	json5Punctuator,
+	json5String,
+	json5Number
+);
 
 // SingleLineCommentChar ::
 // 	SourceCharacter but not LineTerminator
-function singleLineCommentChar(input: string): ScanResult {
-	return butNot(sourceCharacter, lineTerminator)(input);
-}
+const singleLineCommentChar: Scanner = butNot(sourceCharacter, lineTerminator);
 
 // SingleLineCommentChars ::
 // 	SingleLineCommentChar SingleLineCommentChars(opt)
-function singleLineCommentChars(input: string): ScanResult {
-	return and(singleLineCommentChar, optional(singleLineCommentChars))(input);
-}
+// Note: this doesn't exactly follow the grammar to avoid recursion.
+const singleLineCommentChars: Scanner = oneOrMore(singleLineCommentChar);
 
 // SingleLineComment ::
 // 	// SingleLineCommentChars(opt)
-function singleLineComment(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.LineCommentTrivia,
-		and(literal('//'), optional(singleLineCommentChars))
-	)(input);
-}
+const singleLineComment: Scanner = withSyntaxKind(
+	SyntaxKind.LineCommentTrivia,
+	and(literal('//'), optional(singleLineCommentChars))
+);
 
 // MultiLineNotForwardSlashOrAsteriskChar ::
 // 	SourceCharacter but not one of / or *
-function multiLineNotForwardSlashOrAsteriskChar(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar because we want to keep
-	// track of line breaks.
-	return or(
-		lineTerminatorSequence,
-		butNot(sourceCharacter, or(literal('/'), literal('*')))
-	)(input);
-}
+//
+// Not used.
 
 // MultiLineNotAsteriskChar ::
 // 	SourceCharacter but not *
-function multiLineNotAsteriskChar(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar because we want to keep
-	// track of line breaks.
-	return or(
-		lineTerminatorSequence,
-		butNot(sourceCharacter, literal('*'))
-	)(input);
-}
-
-// PostAsteriskCommentChars ::
-// 	MultiLineNotForwardSlashOrAsteriskChar MultiLineCommentChars(opt)
-// 	* PostAsteriskCommentChars(opt)
-function postAsteriskCommentChars(input: string): ScanResult {
-	return or(
-		and(
-			multiLineNotForwardSlashOrAsteriskChar,
-			optional(multiLineCommentChars)
-		),
-		and(literal('*'), optional(postAsteriskCommentChars))
-	)(input);
-}
+//
+// Note: this doesn't exactly follow the grammar because we want to keep track
+// of line breaks.
+const multiLineNotAsteriskChar: Scanner = or(
+	lineTerminatorSequence,
+	butNot(sourceCharacter, literal('*'))
+);
 
 // MultiLineCommentChars ::
 // 	MultiLineNotAsteriskChar MultiLineCommentChars(opt)
 // 	* PostAsteriskCommentChars(opt)
-function multiLineCommentChars(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar because the final '*' from
-	// '*/' should not be part of the lexeme.
-	return oneOrMore(
-		or(multiLineNotAsteriskChar, lookaheadNot(literal('*'), literal('/')))
-	)(input);
-}
+//
+// Note: this doesn't exactly follow the grammar because the final '*' from
+// '*/' should not be part of the lexeme.
+const multiLineCommentChars: Scanner = oneOrMore(
+	or(multiLineNotAsteriskChar, lookaheadNot(literal('*'), literal('/')))
+);
+
+// PostAsteriskCommentChars ::
+// 	MultiLineNotForwardSlashOrAsteriskChar MultiLineCommentChars(opt)
+// 	* PostAsteriskCommentChars(opt)
+//
+// Not used.
 
 // MultiLineComment ::
 // 	/* MultiLineCommentChars(opt) */
-function multiLineComment(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.BlockCommentTrivia,
-		and(literal('/*'), optional(multiLineCommentChars), literal('*/'))
-	)(input);
-}
+const multiLineComment: Scanner = withSyntaxKind(
+	SyntaxKind.BlockCommentTrivia,
+	and(literal('/*'), optional(multiLineCommentChars), literal('*/'))
+);
 
 // Comment ::
 // 	MultiLineComment
 // 	SingleLineComment
-function comment(input: string): ScanResult {
-	return or(multiLineComment, singleLineComment)(input);
-}
+const comment: Scanner = or(multiLineComment, singleLineComment);
 
 // WhiteSpace ::
 // 	<TAB>
@@ -799,51 +749,35 @@ function comment(input: string): ScanResult {
 // 	<NBSP>
 // 	<BOM>
 // 	<USP>
-export function whiteSpace(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar because we want to treat
-	// contiguous whitespace as one token.
-	return withSyntaxKind(
-		SyntaxKind.Trivia,
-		oneOrMore(
-			or(
-				literal('\t'),
-				literal('\u000B'),
-				literal('\u000C'),
-				literal('\u0020'),
-				literal('\u00A0'),
-				literal('\uFEFF'),
-				match(/^\p{Zs}/u)
-			)
-		)
-	)(input);
-}
-
-// LineTerminatorSequence ::
-// 	<LF>
-// 	<CR> [lookahead ∉ <LF> ]
-// 	<LS>
-// 	<PS>
-// 	<CR> <LF>
-export function lineTerminatorSequence(input: string): ScanResult {
-	return withSyntaxKind(
-		SyntaxKind.LineBreakTrivia,
+//
+// Note: this doesn't exactly follow the grammar because we want to treat
+// contiguous whitespace as one token.
+const whiteSpace: Scanner = withSyntaxKind(
+	SyntaxKind.Trivia,
+	oneOrMore(
 		or(
-			literalLineBreak('\n'),
-			lookaheadNot(literalLineBreak('\r'), literalLineBreak('\n')),
-			literalLineBreak('\u2028'),
-			literalLineBreak('\u2029'),
-			literalLineBreak('\r\n')
+			literal('\t'),
+			literal('\u000B'),
+			literal('\u000C'),
+			literal('\u0020'),
+			literal('\u00A0'),
+			literal('\uFEFF'),
+			match(/^\p{Zs}/u)
 		)
-	)(input);
-}
+	)
+);
 
 // JSON5InputElement ::
 // 	WhiteSpace
 // 	LineTerminator
 // 	Comment
 // 	JSON5Token
-export function json5InputElement(input: string): ScanResult {
-	// Note: this doesn't exactly follow the grammar because we want to treat
-	// \r\n as a single token.
-	return or(whiteSpace, lineTerminatorSequence, comment, json5Token)(input);
-}
+//
+// Note: this doesn't exactly follow the grammar because we want to treat
+// '\r\n' as a single token.
+export const json5InputElement: Scanner = or(
+	whiteSpace,
+	lineTerminatorSequence,
+	comment,
+	json5Token
+);
