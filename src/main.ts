@@ -8,10 +8,10 @@ import * as scanner from './impl/scanner';
 import * as parser from './impl/parser';
 
 /**
- * Creates a JSON scanner on the given text.
+ * Creates a JSON5 scanner on the given text.
  * If ignoreTrivia is set, whitespaces or comments are ignored.
  */
-export const createScanner: (text: string, ignoreTrivia?: boolean) => JSONScanner = scanner.createScanner;
+export const createScanner: (text: string, ignoreTrivia?: boolean) => JSON5Scanner = scanner.createScanner;
 
 export const enum ScanError {
 	None,
@@ -76,9 +76,9 @@ export function printSyntaxKind(code: SyntaxKind): string {
 }
 
 /**
- * The scanner object, representing a JSON scanner at a position in the input string.
+ * The scanner object, representing a JSON5 scanner at a position in the input string.
  */
-export interface JSONScanner {
+export interface JSON5Scanner {
 	/**
 	 * Sets the scan position to a new offset. A call to 'scan' is needed to get the first token.
 	 */
@@ -123,25 +123,25 @@ export interface JSONScanner {
 
 
 /**
- * For a given offset, evaluate the location in the JSON document. Each segment in the location path is either a property name or an array index.
+ * For a given offset, evaluate the location in the JSON5 document. Each segment in the location path is either a property name or an array index.
  */
 export const getLocation: (text: string, position: number) => Location = parser.getLocation;
 
 /**
- * Parses the given text and returns the object the JSON content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns the object the JSON5 content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  * Therefore, always check the errors list to find out if the input was valid.
  */
 export const parse: (text: string, errors?: ParseError[], options?: ParseOptions) => any = parser.parse;
 
 /**
- * Parses the given text and returns a tree representation the JSON content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns a tree representation the JSON5 content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  */
 export const parseTree: (text: string, errors?: ParseError[], options?: ParseOptions) => Node = parser.parseTree;
 
 /**
- * Finds the node at the given path in a JSON DOM.
+ * Finds the node at the given path in a JSON5 DOM.
  */
-export const findNodeAtLocation: (root: Node, path: JSONPath) => Node | undefined = parser.findNodeAtLocation;
+export const findNodeAtLocation: (root: Node, path: Path) => Node | undefined = parser.findNodeAtLocation;
 
 /**
  * Finds the innermost node at the given offset. If includeRightBound is set, also finds nodes that end at the given offset.
@@ -149,19 +149,19 @@ export const findNodeAtLocation: (root: Node, path: JSONPath) => Node | undefine
 export const findNodeAtOffset: (root: Node, offset: number, includeRightBound?: boolean) => Node | undefined = parser.findNodeAtOffset;
 
 /**
- * Gets the JSON path of the given JSON DOM node
+ * Gets the path of the given JSON5 DOM node
  */
-export const getNodePath: (node: Node) => JSONPath = parser.getNodePath;
+export const getNodePath: (node: Node) => Path = parser.getNodePath;
 
 /**
- * Evaluates the JavaScript object of the given JSON DOM node 
+ * Evaluates the JavaScript object of the given JSON5 DOM node 
  */
 export const getNodeValue: (node: Node) => any = parser.getNodeValue;
 
 /**
  * Parses the given text and invokes the visitor functions for each object, array and literal reached.
  */
-export const visit: (text: string, visitor: JSONVisitor, options?: ParseOptions) => any = parser.visit;
+export const visit: (text: string, visitor: JSON5Visitor, options?: ParseOptions) => any = parser.visit;
 
 export interface ParseError {
 	error: ParseErrorCode;
@@ -214,7 +214,7 @@ export interface Node {
 }
 
 export type Segment = string | number;
-export type JSONPath = Segment[];
+export type Path = Segment[];
 
 export interface Location {
 	/**
@@ -222,16 +222,16 @@ export interface Location {
 	 */
 	previousNode?: Node;
 	/**
-	 * The path describing the location in the JSON document. The path consists of a sequence of strings
+	 * The path describing the location in the JSON5 document. The path consists of a sequence of strings
 	 * representing an object property or numbers for array indices.
 	 */
-	path: JSONPath;
+	path: Path;
 	/**
 	 * Matches the locations path against a pattern consisting of strings (for properties) and numbers (for array indices).
 	 * '*' will match a single segment of any property name or index.
 	 * '**' will match a sequence of segments of any property name or index, or no segment.
 	 */
-	matches: (patterns: JSONPath) => boolean;
+	matches: (patterns: Path) => boolean;
 	/**
 	 * If set, the location's offset is at a property key.
 	 */
@@ -242,7 +242,7 @@ export interface ParseOptions {
 	allowEmptyContent?: boolean;
 }
 
-export interface JSONVisitor {
+export interface JSON5Visitor {
 	/**
 	 * Invoked when an open brace is encountered and an object is started. The offset and length represent the location of the open brace.
 	 */

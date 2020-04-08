@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import { ScanError, SyntaxKind, JSONScanner } from '../main';
+import { ScanError, SyntaxKind, JSON5Scanner } from '../main';
 import { ScanResult, isFailure, json5InputElement } from './grammar';
 
 /**
- * Creates a JSON scanner on the given text.
+ * Creates a JSON5 scanner on the given text.
  * If ignoreTrivia is set, whitespaces or comments are ignored.
  */
-export function createScanner(text: string, ignoreTrivia: boolean = false): JSONScanner {
+export function createScanner(text: string, ignoreTrivia: boolean = false): JSON5Scanner {
 
 	type ScanState = {
 		token: SyntaxKind;

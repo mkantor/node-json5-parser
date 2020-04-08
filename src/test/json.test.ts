@@ -21,7 +21,7 @@ import {
 	getNodePath,
 	ScanError,
 	visit,
-	JSONVisitor,
+	JSON5Visitor,
 	printSyntaxKind,
 	printScanError,
 	printParseErrorCode,
@@ -135,7 +135,7 @@ function assertTree(input: string, expected: any, expectedErrors: ParseError[] =
 }
 
 interface VisitorCallback {
-	id: keyof JSONVisitor,
+	id: keyof JSON5Visitor,
 	text: string;
 	startLine: number;
 	startCharacter: number;
@@ -149,8 +149,8 @@ interface VisitorError extends ParseError {
 function assertVisit(input: string, expected: VisitorCallback[], expectedErrors: VisitorError[] = []): void {
 	let errors: VisitorError[] = [];
 	let actuals: VisitorCallback[] = [];
-	let noArgHandler = (id: keyof JSONVisitor) => (offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter });
-	let oneArgHandler = (id: keyof JSONVisitor) => (arg: any, offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter, arg });
+	let noArgHandler = (id: keyof JSON5Visitor) => (offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter });
+	let oneArgHandler = (id: keyof JSON5Visitor) => (arg: any, offset: number, length: number, startLine: number, startCharacter: number) => actuals.push({ id, text: input.substr(offset, length), startLine, startCharacter, arg });
 	visit(input, {
 		onObjectBegin: noArgHandler('onObjectBegin'),
 		onObjectProperty: oneArgHandler('onObjectProperty'),

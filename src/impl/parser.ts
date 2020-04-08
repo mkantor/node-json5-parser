@@ -7,8 +7,8 @@
 import JSON5 = require('json5');
 import { createScanner } from './scanner';
 import {
-	JSONPath,
-	JSONVisitor,
+	Path,
+	JSON5Visitor,
 	Location,
 	Node,
 	NodeType,
@@ -31,7 +31,7 @@ interface NodeImpl extends Node {
 }
 
 /**
- * For a given offset, evaluate the location in the JSON document. Each segment in the location path is either a property name or an array index.
+ * For a given offset, evaluate the location in the JSON5 document. Each segment in the location path is either a property name or an array index.
  */
 export function getLocation(text: string, position: number): Location {
 	const segments: Segment[] = []; // strings or numbers
@@ -151,7 +151,7 @@ export function getLocation(text: string, position: number): Location {
 
 
 /**
- * Parses the given text and returns the object the JSON content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns the object the JSON5 content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  * Therefore always check the errors list to find out if the input was valid.
  */
 export function parse(text: string, errors: ParseError[] = [], options: ParseOptions = {}): any {
@@ -167,7 +167,7 @@ export function parse(text: string, errors: ParseError[] = [], options: ParseOpt
 		}
 	}
 
-	const visitor: JSONVisitor = {
+	const visitor: JSON5Visitor = {
 		onObjectBegin: () => {
 			const object = {};
 			onValue(object);
@@ -202,7 +202,7 @@ export function parse(text: string, errors: ParseError[] = [], options: ParseOpt
 
 
 /**
- * Parses the given text and returns a tree representation the JSON content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns a tree representation the JSON5 content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  */
 export function parseTree(text: string, errors: ParseError[] = [], options: ParseOptions = {}): Node {
 	let currentParent: NodeImpl = { type: 'array', offset: -1, length: -1, children: [], parent: undefined }; // artificial root
@@ -219,7 +219,7 @@ export function parseTree(text: string, errors: ParseError[] = [], options: Pars
 		return valueNode;
 	}
 
-	const visitor: JSONVisitor = {
+	const visitor: JSON5Visitor = {
 		onObjectBegin: (offset: number) => {
 			currentParent = onValue({ type: 'object', offset, length: -1, parent: currentParent, children: [] });
 		},
@@ -269,9 +269,9 @@ export function parseTree(text: string, errors: ParseError[] = [], options: Pars
 }
 
 /**
- * Finds the node at the given path in a JSON DOM.
+ * Finds the node at the given path in a JSON5 DOM.
  */
-export function findNodeAtLocation(root: Node, path: JSONPath): Node | undefined {
+export function findNodeAtLocation(root: Node, path: Path): Node | undefined {
 	if (!root) {
 		return undefined;
 	}
@@ -304,9 +304,9 @@ export function findNodeAtLocation(root: Node, path: JSONPath): Node | undefined
 }
 
 /**
- * Gets the JSON path of the given JSON DOM node
+ * Gets the path of the given JSON5 DOM node
  */
-export function getNodePath(node: Node): JSONPath {
+export function getNodePath(node: Node): Path {
 	if (!node.parent || !node.parent.children) {
 		return [];
 	}
@@ -324,7 +324,7 @@ export function getNodePath(node: Node): JSONPath {
 }
 
 /**
- * Evaluates the JavaScript object of the given JSON DOM node
+ * Evaluates the JavaScript object of the given JSON5 DOM node
  */
 export function getNodeValue(node: Node): any {
 	switch (node.type) {
@@ -378,7 +378,7 @@ export function findNodeAtOffset(node: Node, offset: number, includeRightBound =
 /**
  * Parses the given text and invokes the visitor functions for each object, array and literal reached.
  */
-export function visit(text: string, visitor: JSONVisitor, options: ParseOptions = {}): any {
+export function visit(text: string, visitor: JSON5Visitor, options: ParseOptions = {}): any {
 
 	const _scanner = createScanner(text, false);
 
