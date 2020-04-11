@@ -1,26 +1,27 @@
 {
-  "name": "jsonc-parser",
-  "version": "2.2.1",
-  "description": "Scanner and parser for JSON with comments.",
+  "name": "json5-parser",
+  "version": "0.0.0",
+  "description": "Scanner and parser for JSON5.",
   "main": "./lib/umd/main.js",
   "typings": "./lib/umd/main",
   "module": "./lib/esm/main.js",
-  "author": "Microsoft Corporation",
+  "author": "Matt Kantor",
   "repository": {
     "type": "git",
-    "url": "https://github.com/microsoft/node-jsonc-parser"
+    "url": "https://github.com/mkantor/node-json5-parser"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/microsoft/node-jsonc-parser/issues"
+    "url": "https://github.com/mkantor/node-json5-parser/issues"
   },
   "devDependencies": {
-    "mocha": "^6.2.2",
-    "typescript": "^3.6.4",
-    "@types/node": "^10.12.12",
+    "@types/json5": "^0.0.30",
     "@types/mocha": "^5.2.7",
+    "@types/node": "^10.12.12",
+    "mocha": "^6.2.2",
+    "rimraf": "^3.0.0",
     "tslint": "^5.20.0",
-    "rimraf": "^3.0.0"
+    "typescript": "^3.8.3"
   },
   "scripts": {
     "prepublishOnly": "npm run clean && npm run compile-esm && npm run test && npm run remove-sourcemap-refs",
@@ -31,7 +32,11 @@
     "clean": "rimraf lib",
     "watch": "tsc -w -p ./src",
     "test": "npm run compile && mocha",
+    "profile": "npm run compile && NODE_ENV=production node --prof ./lib/umd/benchmark/index.js && echo \"Run this for detailed profiling:\nnode --prof-process $(ls -1 isolate-*.log | tail -n1)\"",
     "preversion": "npm test",
     "postversion": "git push && git push --tags"
+  },
+  "dependencies": {
+    "json5": "^2.1.3"
   }
 }

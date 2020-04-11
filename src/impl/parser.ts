@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
+import JSON5 = require('json5');
 import { createScanner } from './scanner';
 import {
-	JSONPath,
-	JSONVisitor,
+	Path,
+	JSON5Visitor,
 	Location,
 	Node,
 	NodeType,
@@ -18,12 +19,6 @@ import {
 	Segment,
 	SyntaxKind
 } from '../main';
-
-namespace ParseOptions {
-	export const DEFAULT = {
-		allowTrailingComma: false
-	};
-}
 
 interface NodeImpl extends Node {
 	type: NodeType;
@@ -36,7 +31,7 @@ interface NodeImpl extends Node {
 }
 
 /**
- * For a given offset, evaluate the location in the JSON document. Each segment in the location path is either a property name or an array index.
+ * For a given offset, evaluate the location in the JSON5 document. Each segment in the location path is either a property name or an array index.
  */
 export function getLocation(text: string, position: number): Location {
 	const segments: Segment[] = []; // strings or numbers
@@ -156,10 +151,10 @@ export function getLocation(text: string, position: number): Location {
 
 
 /**
- * Parses the given text and returns the object the JSON content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns the object the JSON5 content represents. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  * Therefore always check the errors list to find out if the input was valid.
  */
-export function parse(text: string, errors: ParseError[] = [], options: ParseOptions = ParseOptions.DEFAULT): any {
+export function parse(text: string, errors: ParseError[] = [], options: ParseOptions = {}): any {
 	let currentProperty: string | null = null;
 	let currentParent: any = [];
 	const previousParents: any[] = [];
@@ -172,7 +167,7 @@ export function parse(text: string, errors: ParseError[] = [], options: ParseOpt
 		}
 	}
 
-	const visitor: JSONVisitor = {
+	const visitor: JSON5Visitor = {
 		onObjectBegin: () => {
 			const object = {};
 			onValue(object);
@@ -207,9 +202,9 @@ export function parse(text: string, errors: ParseError[] = [], options: ParseOpt
 
 
 /**
- * Parses the given text and returns a tree representation the JSON content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
+ * Parses the given text and returns a tree representation the JSON5 content. On invalid input, the parser tries to be as fault tolerant as possible, but still return a result.
  */
-export function parseTree(text: string, errors: ParseError[] = [], options: ParseOptions = ParseOptions.DEFAULT): Node {
+export function parseTree(text: string, errors: ParseError[] = [], options: ParseOptions = {}): Node {
 	let currentParent: NodeImpl = { type: 'array', offset: -1, length: -1, children: [], parent: undefined }; // artificial root
 
 	function ensurePropertyComplete(endOffset: number) {
@@ -224,7 +219,7 @@ export function parseTree(text: string, errors: ParseError[] = [], options: Pars
 		return valueNode;
 	}
 
-	const visitor: JSONVisitor = {
+	const visitor: JSON5Visitor = {
 		onObjectBegin: (offset: number) => {
 			currentParent = onValue({ type: 'object', offset, length: -1, parent: currentParent, children: [] });
 		},
@@ -274,9 +269,9 @@ export function parseTree(text: string, errors: ParseError[] = [], options: Pars
 }
 
 /**
- * Finds the node at the given path in a JSON DOM.
+ * Finds the node at the given path in a JSON5 DOM.
  */
-export function findNodeAtLocation(root: Node, path: JSONPath): Node | undefined {
+export function findNodeAtLocation(root: Node, path: Path): Node | undefined {
 	if (!root) {
 		return undefined;
 	}
@@ -309,9 +304,9 @@ export function findNodeAtLocation(root: Node, path: JSONPath): Node | undefined
 }
 
 /**
- * Gets the JSON path of the given JSON DOM node
+ * Gets the path of the given JSON5 DOM node
  */
-export function getNodePath(node: Node): JSONPath {
+export function getNodePath(node: Node): Path {
 	if (!node.parent || !node.parent.children) {
 		return [];
 	}
@@ -329,7 +324,7 @@ export function getNodePath(node: Node): JSONPath {
 }
 
 /**
- * Evaluates the JavaScript object of the given JSON DOM node
+ * Evaluates the JavaScript object of the given JSON5 DOM node
  */
 export function getNodeValue(node: Node): any {
 	switch (node.type) {
@@ -383,7 +378,7 @@ export function findNodeAtOffset(node: Node, offset: number, includeRightBound =
 /**
  * Parses the given text and invokes the visitor functions for each object, array and literal reached.
  */
-export function visit(text: string, visitor: JSONVisitor, options: ParseOptions = ParseOptions.DEFAULT): any {
+export function visit(text: string, visitor: JSON5Visitor, options: ParseOptions = {}): any {
 
 	const _scanner = createScanner(text, false);
 
@@ -404,41 +399,21 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		onComment = toNoArgVisit(visitor.onComment),
 		onError = toOneArgVisit(visitor.onError);
 
-	const disallowComments = options && options.disallowComments;
-	const allowTrailingComma = options && options.allowTrailingComma;
 	function scanNext(): SyntaxKind {
 		while (true) {
 			const token = _scanner.scan();
 			switch (_scanner.getTokenError()) {
-				case ScanError.InvalidUnicode:
-					handleError(ParseErrorCode.InvalidUnicode);
-					break;
-				case ScanError.InvalidEscapeCharacter:
-					handleError(ParseErrorCode.InvalidEscapeCharacter);
-					break;
-				case ScanError.UnexpectedEndOfNumber:
-					handleError(ParseErrorCode.UnexpectedEndOfNumber);
-					break;
 				case ScanError.UnexpectedEndOfComment:
-					if (!disallowComments) {
-						handleError(ParseErrorCode.UnexpectedEndOfComment);
-					}
+					handleError(ParseErrorCode.UnexpectedEndOfComment);
 					break;
 				case ScanError.UnexpectedEndOfString:
 					handleError(ParseErrorCode.UnexpectedEndOfString);
-					break;
-				case ScanError.InvalidCharacter:
-					handleError(ParseErrorCode.InvalidCharacter);
 					break;
 			}
 			switch (token) {
 				case SyntaxKind.LineCommentTrivia:
 				case SyntaxKind.BlockCommentTrivia:
-					if (disallowComments) {
-						handleError(ParseErrorCode.InvalidCommentToken);
-					} else {
-						onComment();
-					}
+					onComment();
 					break;
 				case SyntaxKind.Unknown:
 					handleError(ParseErrorCode.InvalidSymbol);
@@ -469,7 +444,18 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 	}
 
 	function parseString(isValue: boolean): boolean {
-		const value = _scanner.getTokenValue();
+		let value = '';
+		try {
+			const parsed = JSON5.parse(_scanner.getTokenValue());
+			if (typeof parsed !== 'string') {
+				handleError(ParseErrorCode.InvalidString);
+				value = '';
+			} else {
+				value = parsed;
+			}
+		} catch (e) {
+			handleError(ParseErrorCode.InvalidString);
+		}
 		if (isValue) {
 			onLiteralValue(value);
 		} else {
@@ -479,15 +465,26 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		return true;
 	}
 
+	function parseIdentifier(): boolean {
+		const value = _scanner.getTokenValue();
+		onObjectProperty(value);
+		scanNext();
+		return true;
+	}
+
 	function parseLiteral(): boolean {
 		switch (_scanner.getToken()) {
 			case SyntaxKind.NumericLiteral:
+			case SyntaxKind.InfinityKeyword:
+			case SyntaxKind.NaNKeyword:
 				let value = 0;
 				try {
-					value = JSON.parse(_scanner.getTokenValue());
-					if (typeof value !== 'number') {
+					let parsed = JSON5.parse(_scanner.getTokenValue());
+					if (typeof parsed !== 'number') {
 						handleError(ParseErrorCode.InvalidNumberFormat);
 						value = 0;
+					} else {
+						value = parsed;
 					}
 				} catch (e) {
 					handleError(ParseErrorCode.InvalidNumberFormat);
@@ -511,11 +508,27 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 	}
 
 	function parseProperty(): boolean {
-		if (_scanner.getToken() !== SyntaxKind.StringLiteral) {
-			handleError(ParseErrorCode.PropertyNameExpected, [], [SyntaxKind.CloseBraceToken, SyntaxKind.CommaToken]);
+		const token = _scanner.getToken();
+		if (token === SyntaxKind.StringLiteral) {
+			parseString(false);
+		} else if (
+			token === SyntaxKind.Identifier ||
+			token === SyntaxKind.TrueKeyword ||
+			token === SyntaxKind.FalseKeyword ||
+			token === SyntaxKind.NullKeyword ||
+			token === SyntaxKind.InfinityKeyword ||
+			token === SyntaxKind.NaNKeyword
+		) {
+			parseIdentifier();
+		} else {
+			handleError(
+				ParseErrorCode.PropertyNameExpected,
+				[],
+				[SyntaxKind.CloseBraceToken, SyntaxKind.CommaToken]
+			);
 			return false;
 		}
-		parseString(false);
+
 		if (_scanner.getToken() === SyntaxKind.ColonToken) {
 			onSeparator(':');
 			scanNext(); // consume colon
@@ -541,7 +554,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 				}
 				onSeparator(',');
 				scanNext(); // consume comma
-				if (_scanner.getToken() === SyntaxKind.CloseBraceToken && allowTrailingComma) {
+				if (_scanner.getToken() === SyntaxKind.CloseBraceToken) {
 					break;
 				}
 			} else if (needsComma) {
@@ -573,7 +586,7 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 				}
 				onSeparator(',');
 				scanNext(); // consume comma
-				if (_scanner.getToken() === SyntaxKind.CloseBracketToken && allowTrailingComma) {
+				if (_scanner.getToken() === SyntaxKind.CloseBracketToken) {
 					break;
 				}
 			} else if (needsComma) {
@@ -622,40 +635,6 @@ export function visit(text: string, visitor: JSONVisitor, options: ParseOptions 
 		handleError(ParseErrorCode.EndOfFileExpected, [], []);
 	}
 	return true;
-}
-
-/**
- * Takes JSON with JavaScript-style comments and remove
- * them. Optionally replaces every none-newline character
- * of comments with a replaceCharacter
- */
-export function stripComments(text: string, replaceCh?: string): string {
-
-	let _scanner = createScanner(text),
-		parts: string[] = [],
-		kind: SyntaxKind,
-		offset = 0,
-		pos: number;
-
-	do {
-		pos = _scanner.getPosition();
-		kind = _scanner.scan();
-		switch (kind) {
-			case SyntaxKind.LineCommentTrivia:
-			case SyntaxKind.BlockCommentTrivia:
-			case SyntaxKind.EOF:
-				if (offset !== pos) {
-					parts.push(text.substring(offset, pos));
-				}
-				if (replaceCh !== undefined) {
-					parts.push(_scanner.getTokenValue().replace(/[^\r\n]/g, replaceCh));
-				}
-				offset = _scanner.getPosition();
-				break;
-		}
-	} while (kind !== SyntaxKind.EOF);
-
-	return parts.join('');
 }
 
 export function getNodeType(value: any): NodeType {
