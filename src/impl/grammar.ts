@@ -351,7 +351,7 @@ const nanLiteral: Scanner = withSyntaxKind(
 	literal('NaN')
 );
 
-// JSON5NumericLiteral::
+// JSON5NumericLiteral ::
 // 	NumericLiteral
 // 	Infinity
 // 	NaN
@@ -361,7 +361,7 @@ const json5NumericLiteral: Scanner = or(
 	nanLiteral
 );
 
-// JSON5Number::
+// JSON5Number ::
 // 	JSON5NumericLiteral
 // 	+ JSON5NumericLiteral
 // 	- JSON5NumericLiteral
@@ -503,7 +503,7 @@ const escapeSequence: Scanner = or(
 	unicodeEscapeSequence
 );
 
-// JSON5SingleStringCharacter::
+// JSON5SingleStringCharacter ::
 // 	SourceCharacter but not one of ' or \ or LineTerminator
 // 	\ EscapeSequence
 // 	LineContinuation
@@ -517,7 +517,7 @@ const json5SingleStringCharacter: Scanner = or(
 	literal('\u2029')
 );
 
-// JSON5DoubleStringCharacter::
+// JSON5DoubleStringCharacter ::
 // 	SourceCharacter but not one of " or \ or LineTerminator
 // 	\ EscapeSequence
 // 	LineContinuation
@@ -531,19 +531,19 @@ const json5DoubleStringCharacter: Scanner = or(
 	literal('\u2029')
 );
 
-// JSON5SingleStringCharacters::
+// JSON5SingleStringCharacters ::
 // 	JSON5SingleStringCharacter JSON5SingleStringCharacters(opt)
 const json5SingleStringCharacters: Scanner = oneOrMore(
 	json5SingleStringCharacter
 );
 
-// JSON5DoubleStringCharacters::
+// JSON5DoubleStringCharacters ::
 // 	JSON5DoubleStringCharacter JSON5DoubleStringCharacters(opt)
 const json5DoubleStringCharacters: Scanner = oneOrMore(
 	json5DoubleStringCharacter
 );
 
-// JSON5String::
+// JSON5String ::
 // 	"JSON5DoubleStringCharacters(opt)"
 // 	'JSON5SingleStringCharacters(opt)'
 const json5String: Scanner = withSyntaxKind(
