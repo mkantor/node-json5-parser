@@ -1,6 +1,8 @@
 # json5-parser
 Scanner and parser for [JSON5](https://json5.org/) based on Microsoft's [node-jsonc-parser](https://github.com/microsoft/node-jsonc-parser).
 
+**WARNING: This package is experimental and not recommended for general use until v1.0.0.**
+
 Why?
 ----
 This node module provides a scanner and fault tolerant parser that can process JSON5.
