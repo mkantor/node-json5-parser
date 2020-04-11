@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import JSON5 = require('json5');
+import * as JSON5 from 'json5';
 import { createScanner } from './scanner';
 import {
 	Path,

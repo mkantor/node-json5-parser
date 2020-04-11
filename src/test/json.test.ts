@@ -26,7 +26,7 @@ import {
 	printScanError,
 	printParseErrorCode,
 } from '../main';
-import JSON5 = require('json5');
+import * as JSON5 from 'json5';
 
 function printKinds(kinds: SyntaxKind[]): string {
 	return JSON5.stringify(kinds.map(printSyntaxKind));
